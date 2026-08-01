@@ -10,6 +10,7 @@ import {
   type EmailRow,
 } from "../src/agent/storage/emails.ts";
 import { normalizeAttachments } from "../src/email/attachments.ts";
+import { clearStoredMemories } from "../src/agent/storage/memories.ts";
 
 test("normalizes attachment metadata and binary content for R2 storage", () => {
   const [attachment] = normalizeAttachments("email-1", [
@@ -116,4 +117,19 @@ test("ambiguous delivery outcomes become non-retryable instead of draft", () => 
     assert.match(query, /status = 'sending'/);
     assert.doesNotMatch(query, /status = 'draft'/);
   }
+});
+
+test("clearing memories deletes only generic memory rows", () => {
+  const queries: string[] = [];
+  const host = {
+    sql<T>(strings: TemplateStringsArray): T[] {
+      queries.push(strings.join("?"));
+      return [{ key: "email style" }, { key: "coffee" }] as T[];
+    },
+  };
+
+  assert.equal(clearStoredMemories(host), 2);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0] ?? "", /DELETE FROM memories/);
+  assert.match(queries[0] ?? "", /RETURNING key/);
 });

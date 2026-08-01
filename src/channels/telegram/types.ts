@@ -10,6 +10,7 @@ import type {
   OwnerProfile,
   OutgoingEmailAttachment,
   PendingDraft,
+  PersonalMemory,
   StoredEmail,
   StoredEmailAttachment,
   StoredEmailSummary,
@@ -36,6 +37,7 @@ export type PersonalAgentActions = {
     attachmentIds?: string[],
   ): Promise<OutgoingEmailAttachment[]>;
   getProfile(): MaybePromise<OwnerProfile>;
+  listMemories(): MaybePromise<PersonalMemory[]>;
   listEmails(limit?: number): MaybePromise<StoredEmailSummary[]>;
   listEmailAttachments(
     emailReference: string,
@@ -48,6 +50,9 @@ export type PersonalAgentActions = {
     uploads: UploadedTelegramAttachment[],
   ): Promise<StoredOutboundAttachment[]>;
   readEmail(emailReference: string): MaybePromise<StoredEmail | null>;
+  remember(key: string, value: string): MaybePromise<PersonalMemory>;
+  forgetMemory(key: string): MaybePromise<boolean>;
+  clearMemories(): MaybePromise<number>;
   respondToChat(input: AgentMessageInput): Promise<AgentChatResponse>;
   resetConversation(conversationId: string): MaybePromise<void>;
   saveConversationTurn(

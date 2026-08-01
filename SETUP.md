@@ -204,7 +204,12 @@ Commands:
 - `/latest` — ten most recent emails
 - `/read <email-id>` — read one email
 - `/draft <email-id> <reply>` — create a reviewable reply
+- `/memory` — list, update, forget, or clear generic memories
 - `/reset` — clear only the current chat's working context
+
+Memory examples: `/memory`, `/memory set email_style concise`, `/memory forget
+email_style`, and `/memory clear`. Memory commands manage generic preferences;
+your name, the agent name, and timezone remain separate profile data.
 
 Natural-language examples:
 

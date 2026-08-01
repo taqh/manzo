@@ -283,7 +283,7 @@ test("runtime capabilities truthfully include proactive notification and sending
 
 test("help lists natural capabilities and every Telegram command", () => {
   const help = helpMessage();
-  for (const command of ["/start", "/latest", "/read", "/draft", "/reset", "/help"]) {
+  for (const command of ["/start", "/latest", "/read", "/draft", "/memory", "/reset", "/help"]) {
     assert.match(help, new RegExp(command.replace("/", "\\/")));
   }
   assert.match(help, /automatically when new mail arrives/i);

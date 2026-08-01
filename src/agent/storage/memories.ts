@@ -93,3 +93,11 @@ export function forgetStoredMemory(host: AgentSqlHost, key: string): boolean {
   `;
   return deleted.length > 0;
 }
+
+export function clearStoredMemories(host: AgentSqlHost): number {
+  const deleted = host.sql<{ key: string }>`
+    DELETE FROM memories
+    RETURNING key
+  `;
+  return deleted.length;
+}

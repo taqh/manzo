@@ -45,6 +45,7 @@ import {
   listOutboundAttachments,
 } from '@/agent/storage/outbound-attachments'
 import {
+  clearStoredMemories,
   forgetStoredMemory,
   listStoredMemories,
   rememberStoredMemory,
@@ -436,6 +437,10 @@ export class InboxAgent extends Agent<
 
   forgetMemory(key: string): boolean {
     return forgetStoredMemory(this, key)
+  }
+
+  clearMemories(): number {
+    return clearStoredMemories(this)
   }
 
   getProfile(): OwnerProfile {
