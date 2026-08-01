@@ -56,6 +56,21 @@ export type OutgoingEmailAttachment = StoredEmailAttachment & {
   data: ArrayBuffer;
 };
 
+export type StoredOutboundAttachment = {
+  id: string;
+  conversationId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+};
+
+export type UploadedTelegramAttachment = {
+  filename: string;
+  mimeType: string;
+  size: number;
+  data: ArrayBuffer;
+};
+
 export type AttachmentRequest = {
   emailId: string;
   attachmentIds: string[];
@@ -96,6 +111,7 @@ export type ReplyDraftResult = DraftConfirmation & {
   recipient: string;
   subject: string;
   body: string;
+  attachments: StoredOutboundAttachment[];
 };
 
 export type NewEmailDraftResult = DraftConfirmation & {
@@ -104,6 +120,7 @@ export type NewEmailDraftResult = DraftConfirmation & {
   recipient: string;
   subject: string;
   body: string;
+  attachments: StoredOutboundAttachment[];
 };
 
 export type DraftResult = ReplyDraftResult | NewEmailDraftResult;
@@ -125,6 +142,7 @@ export type AgentMessageInput = {
   pendingDraft: PendingDraft | null;
   presentedEmailIds: string[];
   text: string;
+  uploadedAttachmentIds: string[];
 };
 
 export type SentDraftResult = {
@@ -154,5 +172,6 @@ export type AgentChatResponse = {
   presentedEmailIds: string[];
   sentDraftId: string | null;
   attachments: OutgoingEmailAttachment[];
+  consumedAttachmentIds: string[];
   model: string;
 };

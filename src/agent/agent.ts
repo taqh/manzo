@@ -39,6 +39,12 @@ import {
   listStoredAttachments,
 } from '@/agent/storage/attachments'
 import {
+  insertOutboundAttachments,
+  linkAttachmentsToDraft,
+  listDraftAttachmentRows,
+  listOutboundAttachments,
+} from '@/agent/storage/outbound-attachments'
+import {
   forgetStoredMemory,
   listStoredMemories,
   rememberStoredMemory,
@@ -66,6 +72,8 @@ import type {
   StoredEmail,
   StoredEmailAttachment,
   StoredEmailSummary,
+  StoredOutboundAttachment,
+  UploadedTelegramAttachment,
 } from '@/agent/types'
 import {
   createPersonalChat,
@@ -76,6 +84,7 @@ import {
 import {
   attachmentR2Key,
   normalizeAttachments,
+  sanitizeAttachmentFilename,
 } from '@/email/attachments'
 import { normalizeEmail } from '@/email/normalize'
 
@@ -311,6 +320,50 @@ export class InboxAgent extends Agent<
     return listStoredAttachments(this, emailReference)
   }
 
+  async storeTelegramAttachments(
+    conversationId: string,
+    uploads: UploadedTelegramAttachment[],
+  ): Promise<StoredOutboundAttachment[]> {
+    const stored = uploads.map((upload) => {
+      const id = `tg_${crypto.randomUUID()}`
+      return {
+        id,
+        conversationId,
+        filename: sanitizeAttachmentFilename(upload.filename, "upload"),
+        mimeType: upload.mimeType || "application/octet-stream",
+        size: upload.data.byteLength,
+        data: upload.data,
+        r2Key: `outbound-attachments/${id}`,
+      }
+    })
+
+    for (const attachment of stored) {
+      await this.env.MAIL_BUCKET.put(attachment.r2Key, attachment.data, {
+        httpMetadata: { contentType: attachment.mimeType },
+        customMetadata: {
+          conversationId,
+          attachmentId: attachment.id,
+          filename: attachment.filename,
+        },
+      })
+    }
+
+    insertOutboundAttachments(
+      this,
+      stored.map(({ data: _data, r2Key, ...attachment }) => ({
+        ...attachment,
+        r2Key,
+      })),
+    )
+    return stored.map(({ data: _data, r2Key: _r2Key, ...attachment }) => attachment)
+  }
+
+  listUploadedAttachments(
+    attachmentIds: string[],
+  ): StoredOutboundAttachment[] {
+    return listOutboundAttachments(this, attachmentIds)
+  }
+
   async getEmailAttachments(
     emailReference: string,
     attachmentIds?: string[],
@@ -421,7 +474,11 @@ export class InboxAgent extends Agent<
     return runPersonalAgent(this.env, this, input)
   }
 
-  createDraft(emailReference: string, body: string): ReplyDraftResult {
+  createDraft(
+    emailReference: string,
+    body: string,
+    attachmentIds: string[] = [],
+  ): ReplyDraftResult {
     const trimmedBody = normalizeDraftBody(body)
 
     const email = this.findEmail(emailReference)
@@ -432,6 +489,7 @@ export class InboxAgent extends Agent<
     const draftId = crypto.randomUUID()
     const revision = 1
     const now = Date.now()
+    const attachments = this.resolveOutboundAttachments(attachmentIds)
 
     this.sql`
       INSERT INTO drafts (
@@ -453,6 +511,7 @@ export class InboxAgent extends Agent<
         ${now}
       )
     `
+    linkAttachmentsToDraft(this, draftId, attachments.map((attachment) => attachment.id))
 
     return {
       kind: 'reply',
@@ -463,6 +522,7 @@ export class InboxAgent extends Agent<
       recipient: email.replyTo,
       subject: subjectForReply(email.subject),
       body: trimmedBody,
+      attachments,
     }
   }
 
@@ -470,6 +530,7 @@ export class InboxAgent extends Agent<
     recipient: string,
     subject: string,
     body: string,
+    attachmentIds: string[] = [],
   ): NewEmailDraftResult {
     const normalizedRecipient = normalizeEmailAddress(recipient)
     const normalizedSubject = normalizeSubject(subject)
@@ -479,6 +540,7 @@ export class InboxAgent extends Agent<
     const draftId = `n_${crypto.randomUUID()}`
     const revision = 1
     const now = Date.now()
+    const attachments = this.resolveOutboundAttachments(attachmentIds)
 
     this.sql`
       INSERT INTO new_email_drafts (
@@ -504,6 +566,7 @@ export class InboxAgent extends Agent<
         ${now}
       )
     `
+    linkAttachmentsToDraft(this, draftId, attachments.map((attachment) => attachment.id))
 
     return {
       kind: 'new',
@@ -513,6 +576,7 @@ export class InboxAgent extends Agent<
       recipient: normalizedRecipient,
       subject: normalizedSubject,
       body: trimmedBody,
+      attachments,
     }
   }
 
@@ -575,6 +639,40 @@ export class InboxAgent extends Agent<
     return findStoredEmailRow(this, emailReference)
   }
 
+  private resolveOutboundAttachments(
+    attachmentIds: string[],
+  ): StoredOutboundAttachment[] {
+    if (attachmentIds.length === 0) {
+      return []
+    }
+
+    const attachments = listOutboundAttachments(this, attachmentIds)
+    if (attachments.length !== attachmentIds.length) {
+      throw new Error('One or more uploaded attachments were not found.')
+    }
+    return attachments
+  }
+
+  private async loadDraftEmailAttachments(
+    draftId: string,
+  ): Promise<EmailAttachment[]> {
+    const rows = listDraftAttachmentRows(this, draftId)
+    const attachments: EmailAttachment[] = []
+    for (const row of rows) {
+      const object = await this.env.MAIL_BUCKET.get(row.r2_key)
+      if (!object) {
+        throw new Error(`Uploaded attachment ${row.filename} is missing from R2.`)
+      }
+      attachments.push({
+        disposition: 'attachment',
+        filename: row.filename,
+        type: row.mimeType,
+        content: await object.arrayBuffer(),
+      })
+    }
+    return attachments
+  }
+
   private async sendReplyDraft(draft: DraftRow): Promise<SentDraftResult> {
     const email = this.findEmail(draft.email_id)
     if (!email) {
@@ -589,6 +687,7 @@ export class InboxAgent extends Agent<
 
     try {
       const ownerName = this.getProfile().ownerName
+      const attachments = await this.loadDraftEmailAttachments(draft.id)
       const result = await this.sendEmail({
         binding: this.env.EMAIL,
         to: email.replyTo,
@@ -599,6 +698,7 @@ export class InboxAgent extends Agent<
         replyTo: email.mailbox,
         subject: subjectForReply(email.subject),
         text: draft.body,
+        ...(attachments.length > 0 ? { attachments } : {}),
         inReplyTo: email.messageId ?? undefined,
         secret: this.env.EMAIL_SECRET,
       })
@@ -657,6 +757,7 @@ export class InboxAgent extends Agent<
 
     try {
       const ownerName = this.getProfile().ownerName
+      const attachments = await this.loadDraftEmailAttachments(draft.id)
       const result = await this.sendEmail({
         binding: this.env.EMAIL,
         to: draft.recipient,
@@ -667,6 +768,7 @@ export class InboxAgent extends Agent<
         replyTo: defaultOutboundMailbox,
         subject: draft.subject,
         text: draft.body,
+        ...(attachments.length > 0 ? { attachments } : {}),
         secret: this.env.EMAIL_SECRET,
       })
 

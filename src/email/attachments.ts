@@ -9,13 +9,20 @@ export type NormalizedAttachment = {
   content: Uint8Array;
 };
 
-function safeFilename(filename: string | null, index: number): string {
-  const fallback = `attachment-${index + 1}`;
+export function sanitizeAttachmentFilename(
+  filename: string | null | undefined,
+  fallback = "attachment",
+): string {
   const normalized = filename
     ?.trim()
     .replace(/[\\/\x00-\x1f]+/g, "_")
     .replace(/^\.+/, "");
   return normalized?.slice(0, 240) || fallback;
+}
+
+function safeFilename(filename: string | null, index: number): string {
+  const fallback = `attachment-${index + 1}`;
+  return sanitizeAttachmentFilename(filename, fallback);
 }
 
 function decodeBase64(value: string): Uint8Array {

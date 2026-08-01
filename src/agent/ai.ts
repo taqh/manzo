@@ -192,6 +192,7 @@ function deterministicResponse(
     presentedEmailIds: options.presentedEmailIds ?? input.presentedEmailIds,
     sentDraftId: null,
     attachments: [],
+    consumedAttachmentIds: [],
     model,
   };
 }
@@ -213,6 +214,9 @@ export async function runPersonalAgent(
     }
   }
   const profile = host.getProfile();
+  const pendingAttachments = host.listUploadedAttachments(
+    input.uploadedAttachmentIds,
+  );
   const timeZone = profile.timeZone ?? DEFAULT_TIME_ZONE;
 
   const modelId = normalizeModelId(env.AI_MODEL);
@@ -246,6 +250,7 @@ export async function runPersonalAgent(
       presentedEmailIds: [],
       sentDraftId: null,
       attachments: [],
+      consumedAttachmentIds: [],
       model: modelId,
     };
   }
@@ -360,6 +365,7 @@ export async function runPersonalAgent(
       localTime: formatLocalTimestamp(now, timeZone),
       memories,
       pendingDraft: input.pendingDraft,
+      pendingAttachments,
       profile,
       toolNames: Object.keys(tools),
     }),
@@ -473,6 +479,7 @@ export async function runPersonalAgent(
         : input.presentedEmailIds,
     sentDraftId: sent?.draftId ?? null,
     attachments,
+    consumedAttachmentIds: toolContext.result.consumedAttachmentIds,
     model: modelId,
   };
 }

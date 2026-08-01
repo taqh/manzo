@@ -40,6 +40,34 @@ type TelegramConfiguration = AgentEnvironment & {
 
 const MAX_CONVERSATIONAL_DRAFT_AGE_MS = 24 * 60 * 60 * 1_000;
 
+type TelegramIncomingAttachment = {
+  name?: string;
+  mimeType?: string;
+  fetchData?: () => Promise<ArrayBuffer | Uint8Array>;
+};
+
+async function storeTelegramMessageAttachments(
+  host: PersonalChatHost,
+  conversationId: string,
+  attachments: readonly TelegramIncomingAttachment[],
+): Promise<string[]> {
+  const uploads = [];
+  for (const attachment of attachments) {
+    if (!attachment.fetchData) {
+      throw new Error("Telegram did not provide downloadable attachment data.");
+    }
+    const data = new Uint8Array(await attachment.fetchData());
+    uploads.push({
+      filename: attachment.name ?? "telegram-upload",
+      mimeType: attachment.mimeType ?? "application/octet-stream",
+      size: data.byteLength,
+      data: data.slice().buffer,
+    });
+  }
+  const stored = await host.storeTelegramAttachments(conversationId, uploads);
+  return stored.map((attachment) => attachment.id);
+}
+
 async function clearPendingDraftSafely(
   thread: Thread<PersonalThreadState>,
   draftId: string,
@@ -76,18 +104,29 @@ async function postAgentResponse(
   thread: Thread<PersonalThreadState>,
   host: PersonalAgentActions,
   text: string,
+  newlyUploadedAttachmentIds: string[] = [],
 ): Promise<void> {
   let confirmedSend = false;
   try {
     await thread.startTyping();
     const state = await thread.state;
+    const pendingAttachmentIds = [
+      ...new Set([
+        ...(state?.pendingAttachmentIds ?? []),
+        ...newlyUploadedAttachmentIds,
+      ]),
+    ];
 
     if (isConversationResetRequest(text)) {
       await resetThread(thread, host);
       return;
     }
 
-    if (state?.pendingDraft && isExplicitSendConfirmation(text)) {
+    if (
+      state?.pendingDraft &&
+      newlyUploadedAttachmentIds.length === 0 &&
+      isExplicitSendConfirmation(text)
+    ) {
       const draftAge = Date.now() - state.pendingDraft.displayedAt;
       if (
         draftAge < 0 ||
@@ -140,6 +179,7 @@ async function postAgentResponse(
       pendingDraft: state?.pendingDraft ?? null,
       presentedEmailIds: state?.presentedEmailIds ?? [],
       text,
+      uploadedAttachmentIds: pendingAttachmentIds,
     });
     confirmedSend = Boolean(response.sentDraftId);
 
@@ -157,7 +197,13 @@ async function postAgentResponse(
     }
 
     try {
-      await thread.setState(operationalStateAfterResponse(response));
+      await thread.setState({
+        ...operationalStateAfterResponse(response),
+        pendingAttachmentIds: pendingAttachmentIds.filter(
+          (attachmentId) =>
+            !response.consumedAttachmentIds.includes(attachmentId),
+        ),
+      });
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -205,6 +251,7 @@ function neutralThreadState(): PersonalThreadState {
     lastInboxPeriod: null,
     lastNotificationEmailId: null,
     pendingDraft: null,
+    pendingAttachmentIds: [],
     presentedEmailIds: [],
   };
 }
@@ -251,17 +298,64 @@ export function createPersonalChat(
       return;
     }
 
+    let newlyUploadedAttachmentIds: string[] = [];
+    if (message.attachments?.length) {
+      try {
+        newlyUploadedAttachmentIds = await storeTelegramMessageAttachments(
+          host,
+          thread.id,
+          message.attachments,
+        );
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: "chat.telegram_attachment_store_failed",
+            error: error instanceof Error ? error.message : "Unknown error",
+          }),
+        );
+        await thread.post(
+          "I couldn’t receive that file from Telegram. Please try uploading it again.",
+        );
+        return;
+      }
+    }
+
     const command = parseCommand(message.text);
     if (command) {
       if (command.name === "/reset") {
         await resetThread(thread, host);
         return;
       }
-      await postCommandResult(thread, host, command);
+      await postCommandResult(
+        thread,
+        host,
+        command,
+        newlyUploadedAttachmentIds,
+      );
       return;
     }
 
-    await postAgentResponse(thread, host, message.text);
+    if (!message.text.trim() && newlyUploadedAttachmentIds.length > 0) {
+      const state = (await thread.state) as PersonalThreadState | null;
+      const pendingAttachmentIds = [
+        ...new Set([
+          ...(state?.pendingAttachmentIds ?? []),
+          ...newlyUploadedAttachmentIds,
+        ]),
+      ];
+      await thread.setState({ pendingAttachmentIds });
+      await thread.post(
+        `I received ${newlyUploadedAttachmentIds.length === 1 ? "the file" : "the files"}. Tell me what you’d like me to do with ${newlyUploadedAttachmentIds.length === 1 ? "it" : "them"}.`,
+      );
+      return;
+    }
+
+    await postAgentResponse(
+      thread,
+      host,
+      message.text,
+      newlyUploadedAttachmentIds,
+    );
   });
 
   chat.onSlashCommand(async (event) => {

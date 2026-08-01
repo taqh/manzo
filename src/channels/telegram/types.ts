@@ -13,12 +13,18 @@ import type {
   StoredEmail,
   StoredEmailAttachment,
   StoredEmailSummary,
+  StoredOutboundAttachment,
+  UploadedTelegramAttachment,
 } from "@/agent/types";
 
 type MaybePromise<T> = T | Promise<T>;
 
 export type PersonalAgentActions = {
-  createDraft(emailReference: string, body: string): MaybePromise<DraftResult>;
+  createDraft(
+    emailReference: string,
+    body: string,
+    attachmentIds?: string[],
+  ): MaybePromise<DraftResult>;
   findPreviousEmailsFrom(
     sender: string,
     excludeEmailReference?: string,
@@ -34,6 +40,13 @@ export type PersonalAgentActions = {
   listEmailAttachments(
     emailReference: string,
   ): MaybePromise<StoredEmailAttachment[]>;
+  listUploadedAttachments(
+    attachmentIds: string[],
+  ): MaybePromise<StoredOutboundAttachment[]>;
+  storeTelegramAttachments(
+    conversationId: string,
+    uploads: UploadedTelegramAttachment[],
+  ): Promise<StoredOutboundAttachment[]>;
   readEmail(emailReference: string): MaybePromise<StoredEmail | null>;
   respondToChat(input: AgentMessageInput): Promise<AgentChatResponse>;
   resetConversation(conversationId: string): MaybePromise<void>;
@@ -63,6 +76,7 @@ export type PersonalThreadState = {
   lastInboxPeriod?: InboxPeriod | null;
   lastNotificationEmailId?: string | null;
   pendingDraft?: PendingDraft | null;
+  pendingAttachmentIds?: string[];
   presentedEmailIds?: string[];
 };
 

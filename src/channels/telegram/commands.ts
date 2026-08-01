@@ -37,9 +37,16 @@ export function parseCommand(text: string): Command | null {
   };
 }
 
+function hasUploadedAttachmentIntent(text: string): boolean {
+  return /\b(?:attach|include|use|with)\b[\s\S]{0,100}\b(?:file|files|document|documents|pdf|image|images|photo|photos|resume|cv|this|these)\b/i.test(
+    text,
+  );
+}
+
 async function executeCommand(
   agent: PersonalAgentActions,
   command: Command,
+  pendingAttachmentIds: string[] = [],
 ): Promise<CommandResult> {
   if (command.name === "/start") {
     return { content: capabilityIntroduction(await agent.getProfile()) };
@@ -82,13 +89,23 @@ async function executeCommand(
 
     const emailReference = command.arguments.slice(0, firstSpace);
     const body = command.arguments.slice(firstSpace + 1).trim();
-    const draft = await agent.createDraft(emailReference, body);
+    const attachmentIds = hasUploadedAttachmentIntent(body)
+      ? pendingAttachmentIds
+      : [];
+    const draft = await agent.createDraft(
+      emailReference,
+      body,
+      attachmentIds,
+    );
     return {
       content: draftCard(draft),
       state: {
         activeEmailId:
           draft.kind === "reply" ? draft.emailShortId : emailReference,
         pendingDraft: toPendingDraft(draft),
+        pendingAttachmentIds: pendingAttachmentIds.filter(
+          (attachmentId) => !attachmentIds.includes(attachmentId),
+        ),
       },
     };
   }
@@ -102,13 +119,23 @@ export async function postCommandResult(
   target: Thread<PersonalThreadState>,
   agent: PersonalAgentActions,
   command: Command,
+  newlyUploadedAttachmentIds: string[] = [],
 ): Promise<void> {
   try {
-    const result = await executeCommand(agent, command);
+    const state = (await target.state) as PersonalThreadState | null;
+    const pendingAttachmentIds = [
+      ...new Set([
+        ...(state?.pendingAttachmentIds ?? []),
+        ...newlyUploadedAttachmentIds,
+      ]),
+    ];
+    const result = await executeCommand(agent, command, pendingAttachmentIds);
     await target.post(result.content);
-    if (result.state) {
-      await target.setState(result.state);
-    }
+    await target.setState({
+      ...result.state,
+      pendingAttachmentIds:
+        result.state?.pendingAttachmentIds ?? pendingAttachmentIds,
+    });
   } catch (error) {
     console.error(
       JSON.stringify({

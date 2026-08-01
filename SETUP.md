@@ -216,10 +216,28 @@ Natural-language examples:
 - “My timezone is America/New_York.”
 - “Your name is Nimbus.”
 - “Send me the PDF from the latest email.”
+- Upload a resume, then say “Email the recruiter and attach this resume.”
 
 For an ordinary draft, say “looks good, send” after reviewing its card. A
 direct-send request is intentionally stricter: it must contain explicit send
 language, recipient, and exact usable wording in the same allowlisted message.
+
+### Sending Telegram uploads by email
+
+Upload one or more files to the bot, then describe the email and explicitly say
+to attach or include the files. For example:
+
+1. Upload `resume.pdf` to Telegram.
+2. Say “Email recruiter@example.com with subject Application and attach this
+   resume.”
+3. Review the draft card, including its attachment list.
+4. Say “looks good, send” or use the card’s send button.
+
+Uploads are staged in private R2 and linked to the draft in Durable Object
+SQLite. Uploading a file by itself never sends an email. You can also upload a
+file with a short caption such as “here it is”, then explicitly tell the agent
+which draft or reply should include it. The current Telegram chat is the only
+chat allowed to use staged uploads.
 
 ## Model configuration and costs
 
@@ -240,11 +258,12 @@ model choice.
 
 Manzo stores mail metadata, drafts, conversation context, memory, the owner
 profile, and attachment metadata in the InboxAgent Durable Object's SQLite
-database. Original `.eml` files and individual attachments are stored in the
-private R2 bucket. Attachments are never forwarded automatically; they are only
-sent to Telegram after an explicit request or button press. There is currently
-no automatic retention policy; review and delete stored data according to your
-own needs and account policy.
+database. Original `.eml` files, inbound email attachments, and Telegram
+uploads are stored in the private R2 bucket. Inbound attachments are only sent
+to Telegram after an explicit request or button press. Telegram uploads are
+only included in email after an explicit attachment request and draft review.
+There is currently no automatic retention policy; review and delete stored data
+according to your own needs and account policy.
 
 ## Troubleshooting
 

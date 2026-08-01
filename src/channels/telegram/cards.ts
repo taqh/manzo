@@ -89,6 +89,17 @@ export function formatEmailList(emails: StoredEmailSummary[]): string {
 }
 
 export function draftCard(draft: DraftResult): CardElement {
+  const attachmentText =
+    draft.attachments.length > 0
+      ? [
+          "",
+          `Attachments (${draft.attachments.length}):`,
+          ...draft.attachments.map(
+            (attachment) => `• ${attachment.filename}`,
+          ),
+        ].join("\n")
+      : "";
+
   return Card({
     title:
       draft.kind === "new"
@@ -102,6 +113,7 @@ export function draftCard(draft: DraftResult): CardElement {
           `Subject: ${draft.subject}`,
           "",
           draft.body,
+          attachmentText,
           "",
           "Nothing has been sent. Check it carefully first.",
         ].join("\n"),

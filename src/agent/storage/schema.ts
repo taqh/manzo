@@ -50,6 +50,27 @@ export function initializeAgentSchema(host: AgentSqlHost): void {
   `;
 
   host.sql`
+    CREATE TABLE IF NOT EXISTS outbound_attachments (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      r2_key TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL
+    )
+  `;
+
+  host.sql`
+    CREATE TABLE IF NOT EXISTS draft_attachments (
+      draft_id TEXT NOT NULL,
+      attachment_id TEXT NOT NULL,
+      PRIMARY KEY (draft_id, attachment_id),
+      FOREIGN KEY (attachment_id) REFERENCES outbound_attachments(id)
+    )
+  `;
+
+  host.sql`
     CREATE TABLE IF NOT EXISTS drafts (
       id TEXT PRIMARY KEY,
       email_id TEXT NOT NULL,

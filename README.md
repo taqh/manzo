@@ -15,7 +15,7 @@ email.
 - Telegram delivery and commands through Chat SDK's Telegram adapter
 - Cloudflare Email Service for replies and brand-new messages
 - Attachment metadata and binary storage in private R2, with explicit Telegram
-  sharing
+  sharing and outbound email attachments from Telegram uploads
 - Durable drafts, exact-draft confirmations, direct-send safeguards,
   duplicate-send prevention, and `delivery_unknown` locking
 - Deterministic inbox queries and proactive Telegram notifications
@@ -94,10 +94,12 @@ Natural-language examples:
 - “My timezone is America/New_York.”
 - “Your name is Nimbus.”
 - “Send me the PDF from the latest email.”
+- Upload a resume, then say “Email the recruiter and attach this resume.”
 
 For an ordinary draft, say “looks good, send” after reviewing its card. Direct
 sends require explicit send language, a recipient, and usable wording in the
-same allowlisted message.
+same allowlisted message. Telegram uploads are staged privately first; sending
+or attaching a file requires an explicit request.
 
 ## Current limitations
 
@@ -105,7 +107,8 @@ same allowlisted message.
   multi-tenant agent.
 - It cannot browse the web.
 - Attachment contents can be listed and explicitly shared into the allowlisted
-  Telegram chat; there is no automatic attachment forwarding.
+  Telegram chat, and Telegram uploads can be attached to reviewed outbound
+  drafts; there is no automatic forwarding or automatic sending.
 - Email Routing and Email Sending are separate Cloudflare setup flows.
 - A successful send requires a provider message ID. Ambiguous outcomes are
   deliberately locked instead of retried automatically.
@@ -137,6 +140,7 @@ troubleshooting.
 src/
   agent/                 durable inbox, AI loop, storage, and guarded tools
     storage/             SQLite schemas and focused storage helpers
+      outbound-attachments.ts  Telegram upload metadata and draft links
     tools/               guarded email, attachment, and memory tools
   channels/telegram/     adapter, commands, cards, state, and webhooks
   email/                 bounded MIME normalization and attachment handling

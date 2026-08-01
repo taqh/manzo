@@ -15,14 +15,20 @@ import type {
   StoredEmail,
   StoredEmailAttachment,
   StoredEmailSummary,
+  StoredOutboundAttachment,
 } from "@/agent/types";
 
 export type PersonalAiHost = {
-  createDraft(emailReference: string, body: string): ReplyDraftResult;
+  createDraft(
+    emailReference: string,
+    body: string,
+    attachmentIds?: string[],
+  ): ReplyDraftResult;
   createNewEmailDraft(
     recipient: string,
     subject: string,
     body: string,
+    attachmentIds?: string[],
   ): NewEmailDraftResult;
   findPreviousEmailsFrom(
     sender: string,
@@ -43,6 +49,7 @@ export type PersonalAiHost = {
   ): ConversationMessage[];
   listEmails(limit?: number): StoredEmailSummary[];
   listEmailAttachments(emailReference: string): StoredEmailAttachment[];
+  listUploadedAttachments(attachmentIds: string[]): StoredOutboundAttachment[];
   listMemories(): PersonalMemory[];
   readEmail(emailReference: string): StoredEmail | null;
   remember(key: string, value: string): PersonalMemory;
@@ -62,6 +69,7 @@ export type PersonalAiHost = {
 
 export type PersonalToolResultState = {
   attachmentRequests: AttachmentRequest[];
+  consumedAttachmentIds: string[];
   drafts: DraftResult[];
   deliveryOutcomeUnknown: boolean;
   factualToolsRun: string[];
@@ -91,6 +99,7 @@ export function createPersonalToolContext(
     result: {
       drafts: [],
       attachmentRequests: [],
+      consumedAttachmentIds: [],
       deliveryOutcomeUnknown: false,
       factualToolsRun: [],
       presentedEmailIds: [],

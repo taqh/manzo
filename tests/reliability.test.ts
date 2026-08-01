@@ -7,6 +7,7 @@ import {
   scopedConversationId,
 } from "../src/agent/conversation.ts";
 import {
+  buildRuntimeInstructions,
   capabilityIntroduction,
   deterministicCapabilityResponse,
   helpMessage,
@@ -292,6 +293,7 @@ test("help lists natural capabilities and every Telegram command", () => {
   assert.match(help, /Remember stable preferences/i);
   assert.match(help, /web browsing/i);
   assert.match(help, /share attachments/i);
+  assert.match(help, /attach files uploaded/i);
 });
 
 test("attachment requests are not mistaken for capability questions", () => {
@@ -303,6 +305,34 @@ test("attachment requests are not mistaken for capability questions", () => {
     deterministicCapabilityResponse("Can you inspect attachments?") ?? "",
     /list them|share them/i,
   );
+  assert.match(
+    deterministicCapabilityResponse("Can you attach files to an email?") ?? "",
+    /outgoing email draft/i,
+  );
+});
+
+test("runtime instructions expose staged Telegram uploads without authorizing them", () => {
+  const runtime = buildRuntimeInstructions({
+    activeEmailId: null,
+    localTime: "2026-08-01 12:00 UTC",
+    memories: [],
+    pendingAttachments: [
+      {
+        id: "tg_resume",
+        conversationId: "telegram:owner",
+        filename: "resume.pdf",
+        mimeType: "application/pdf",
+        size: 1024,
+      },
+    ],
+    pendingDraft: null,
+    profile: emptyProfile,
+    toolNames: ["createDraft", "createNewEmailDraft", "listPendingAttachments"],
+  });
+
+  assert.match(runtime, /resume\.pdf/);
+  assert.match(runtime, /staged privately/);
+  assert.match(runtime, /explicitly asks to use, include, or attach/);
 });
 
 test("runtime copy stays neutral until profile values are learned", () => {
