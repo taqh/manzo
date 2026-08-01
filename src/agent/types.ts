@@ -42,6 +42,25 @@ export type StoredEmail = StoredEmailSummary & {
   isAutoReply: boolean;
 };
 
+export type StoredEmailAttachment = {
+  id: string;
+  emailId: string;
+  filename: string;
+  mimeType: string;
+  disposition: "attachment" | "inline" | null;
+  contentId: string | null;
+  size: number;
+};
+
+export type OutgoingEmailAttachment = StoredEmailAttachment & {
+  data: ArrayBuffer;
+};
+
+export type AttachmentRequest = {
+  emailId: string;
+  attachmentIds: string[];
+};
+
 export type InboxPeriod = "today" | "yesterday";
 
 export type InboxPeriodSummary = {
@@ -134,5 +153,6 @@ export type AgentChatResponse = {
   lastInboxPeriod: InboxPeriod | null;
   presentedEmailIds: string[];
   sentDraftId: string | null;
+  attachments: OutgoingEmailAttachment[];
   model: string;
 };

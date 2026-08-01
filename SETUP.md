@@ -215,6 +215,7 @@ Natural-language examples:
 - “Just send ‘I’ll be there at two’ to friend@example.com.”
 - “My timezone is America/New_York.”
 - “Your name is Nimbus.”
+- “Send me the PDF from the latest email.”
 
 For an ordinary draft, say “looks good, send” after reviewing its card. A
 direct-send request is intentionally stricter: it must contain explicit send
@@ -237,9 +238,11 @@ model choice.
 
 ## Data and state
 
-Manzo stores mail metadata, drafts, conversation context, memory, and the owner
-profile in the InboxAgent Durable Object's SQLite database. Original `.eml`
-files and attachments are stored in the private R2 bucket. There is currently
+Manzo stores mail metadata, drafts, conversation context, memory, the owner
+profile, and attachment metadata in the InboxAgent Durable Object's SQLite
+database. Original `.eml` files and individual attachments are stored in the
+private R2 bucket. Attachments are never forwarded automatically; they are only
+sent to Telegram after an explicit request or button press. There is currently
 no automatic retention policy; review and delete stored data according to your
 own needs and account policy.
 

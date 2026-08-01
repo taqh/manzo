@@ -266,11 +266,13 @@ test("runtime capabilities truthfully include proactive notification and sending
     "sendPendingDraft",
     "sendNewEmail",
     "sendReply",
+    "listEmailAttachments",
+    "sendAttachmentsToTelegram",
   ]);
   assert.equal(capabilities.proactiveEmailNotifications, true);
   assert.equal(capabilities.sendEmail, true);
   assert.equal(capabilities.browseWeb, false);
-  assert.equal(capabilities.inspectAttachments, false);
+  assert.equal(capabilities.inspectAttachments, true);
   assert.match(capabilityIntroduction(emptyProfile), /automatically notify/i);
   assert.match(capabilityIntroduction(emptyProfile), /\/help/i);
   assert.match(
@@ -289,7 +291,18 @@ test("help lists natural capabilities and every Telegram command", () => {
   assert.match(help, /just send/i);
   assert.match(help, /Remember stable preferences/i);
   assert.match(help, /web browsing/i);
-  assert.match(help, /attachment contents/i);
+  assert.match(help, /share attachments/i);
+});
+
+test("attachment requests are not mistaken for capability questions", () => {
+  assert.equal(
+    deterministicCapabilityResponse("Can you show me the attachment?"),
+    null,
+  );
+  assert.match(
+    deterministicCapabilityResponse("Can you inspect attachments?") ?? "",
+    /list them|share them/i,
+  );
 });
 
 test("runtime copy stays neutral until profile values are learned", () => {

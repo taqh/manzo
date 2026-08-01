@@ -9,6 +9,27 @@ import {
   summarizeStoredEmailsInRange,
   type EmailRow,
 } from "../src/agent/storage/emails.ts";
+import { normalizeAttachments } from "../src/email/attachments.ts";
+
+test("normalizes attachment metadata and binary content for R2 storage", () => {
+  const [attachment] = normalizeAttachments("email-1", [
+    {
+      filename: "../notes.txt",
+      mimeType: "text/plain",
+      disposition: "attachment",
+      contentId: undefined,
+      content: new TextEncoder().encode("hello"),
+    },
+  ]);
+
+  assert.equal(attachment?.id, "email-1-attachment-1");
+  assert.equal(attachment?.filename, "_notes.txt");
+  assert.equal(attachment?.mimeType, "text/plain");
+  assert.deepEqual(
+    [...(attachment?.content ?? new Uint8Array())],
+    [...new TextEncoder().encode("hello")],
+  );
+});
 
 test("oldest email queries the complete inbox in ascending order", () => {
   const queries: string[] = [];

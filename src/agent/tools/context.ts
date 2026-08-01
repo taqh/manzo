@@ -1,4 +1,5 @@
 import type {
+  AttachmentRequest,
   AgentMessageInput,
   ConversationMessage,
   DraftResult,
@@ -7,10 +8,12 @@ import type {
   NewEmailDraftResult,
   OwnerProfile,
   OwnerProfileUpdate,
+  OutgoingEmailAttachment,
   PersonalMemory,
   ReplyDraftResult,
   SentDraftResult,
   StoredEmail,
+  StoredEmailAttachment,
   StoredEmailSummary,
 } from "@/agent/types";
 
@@ -28,6 +31,10 @@ export type PersonalAiHost = {
   ): StoredEmailSummary[];
   getInboxSummary(period: InboxPeriod): InboxPeriodSummary;
   getOldestEmail(): StoredEmailSummary | null;
+  getEmailAttachments(
+    emailReference: string,
+    attachmentIds?: string[],
+  ): Promise<OutgoingEmailAttachment[]>;
   getProfile(): OwnerProfile;
   forgetMemory(key: string): boolean;
   listConversationMessages(
@@ -35,6 +42,7 @@ export type PersonalAiHost = {
     limit?: number,
   ): ConversationMessage[];
   listEmails(limit?: number): StoredEmailSummary[];
+  listEmailAttachments(emailReference: string): StoredEmailAttachment[];
   listMemories(): PersonalMemory[];
   readEmail(emailReference: string): StoredEmail | null;
   remember(key: string, value: string): PersonalMemory;
@@ -53,6 +61,7 @@ export type PersonalAiHost = {
 };
 
 export type PersonalToolResultState = {
+  attachmentRequests: AttachmentRequest[];
   drafts: DraftResult[];
   deliveryOutcomeUnknown: boolean;
   factualToolsRun: string[];
@@ -81,6 +90,7 @@ export function createPersonalToolContext(
     memories,
     result: {
       drafts: [],
+      attachmentRequests: [],
       deliveryOutcomeUnknown: false,
       factualToolsRun: [],
       presentedEmailIds: [],

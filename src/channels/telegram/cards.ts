@@ -13,6 +13,7 @@ const CHAT_MESSAGE_LIMIT = 3_500;
 export const ACTION_READ_EMAIL = "r";
 export const ACTION_DRAFT_EMAIL = "d";
 export const ACTION_SEND_DRAFT = "s";
+export const ACTION_SHOW_ATTACHMENTS = "a";
 
 function clipForChat(value: string, limit = CHAT_MESSAGE_LIMIT): string {
   if (value.length <= limit) {
@@ -54,7 +55,7 @@ export function formatEmail(email: StoredEmail): string {
       : "";
   const attachments =
     email.attachmentCount > 0
-      ? `\n\nAttachments: ${email.attachmentCount} (preserved privately)`
+      ? `\n\nAttachments: ${email.attachmentCount} (available to share)`
       : "";
 
   return clipForChat(
@@ -143,6 +144,27 @@ export function notificationCard(email: StoredEmail): CardElement {
     email.attachmentCount > 0
       ? `\n\nThey included ${email.attachmentCount} attachment${email.attachmentCount === 1 ? "" : "s"}.`
       : "";
+  const actions = [
+    Button({
+      id: ACTION_READ_EMAIL,
+      label: "Open",
+      value: email.shortId,
+    }),
+    Button({
+      id: ACTION_DRAFT_EMAIL,
+      label: "Draft reply",
+      value: email.shortId,
+    }),
+  ];
+  if (email.attachmentCount > 0) {
+    actions.push(
+      Button({
+        id: ACTION_SHOW_ATTACHMENTS,
+        label: "Show attachments",
+        value: email.shortId,
+      }),
+    );
+  }
 
   return Card({
     title,
@@ -157,18 +179,7 @@ export function notificationCard(email: StoredEmail): CardElement {
           .filter((line) => line !== "")
           .join("\n"),
       ),
-      Actions([
-        Button({
-          id: ACTION_READ_EMAIL,
-          label: "Open",
-          value: email.shortId,
-        }),
-        Button({
-          id: ACTION_DRAFT_EMAIL,
-          label: "Draft reply",
-          value: email.shortId,
-        }),
-      ]),
+      Actions(actions),
     ],
   });
 }

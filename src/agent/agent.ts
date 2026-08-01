@@ -34,6 +34,11 @@ import {
   type EmailRow,
 } from '@/agent/storage/emails'
 import {
+  insertStoredAttachments,
+  listStoredAttachmentRows,
+  listStoredAttachments,
+} from '@/agent/storage/attachments'
+import {
   forgetStoredMemory,
   listStoredMemories,
   rememberStoredMemory,
@@ -57,7 +62,9 @@ import type {
   OwnerProfileUpdate,
   ReplyDraftResult,
   SentDraftResult,
+  OutgoingEmailAttachment,
   StoredEmail,
+  StoredEmailAttachment,
   StoredEmailSummary,
 } from '@/agent/types'
 import {
@@ -66,6 +73,10 @@ import {
   notifyAboutEmail,
   type PersonalChat,
 } from '@/channels/telegram'
+import {
+  attachmentR2Key,
+  normalizeAttachments,
+} from '@/email/attachments'
 import { normalizeEmail } from '@/email/normalize'
 
 type InboxAgentState = {
@@ -123,6 +134,8 @@ export class InboxAgent extends Agent<
       maxHeadersSize: 256 * 1024,
       maxNestingDepth: 64,
     })
+    const attachments = normalizeAttachments(id, parsed.attachments)
+    await this.persistAttachmentObjects(id, shortId, attachments)
     const normalized = normalizeEmail(parsed, email.from)
     const autoReply = isAutoReplyEmail(parsed.headers)
 
@@ -161,7 +174,7 @@ export class InboxAgent extends Agent<
         ${normalized.htmlBody},
         ${rawKey},
         ${email.rawSize},
-        ${normalized.attachmentCount},
+        ${attachments.length},
         ${autoReply ? 1 : 0},
         ${receivedAt}
       )
@@ -178,6 +191,20 @@ export class InboxAgent extends Agent<
       )
       return
     }
+
+    insertStoredAttachments(
+      this,
+      attachments.map((attachment) => ({
+        id: attachment.id,
+        emailId: id,
+        filename: attachment.filename,
+        mimeType: attachment.mimeType,
+        disposition: attachment.disposition,
+        contentId: attachment.contentId,
+        size: attachment.content.byteLength,
+        r2Key: attachmentR2Key(id, attachment.id),
+      })),
+    )
 
     this.setState({
       emailCount: this.state.emailCount + 1,
@@ -208,7 +235,7 @@ export class InboxAgent extends Agent<
         emailId: shortId,
         mailbox: email.to.toLowerCase(),
         rawSize: email.rawSize,
-        attachmentCount: normalized.attachmentCount,
+        attachmentCount: attachments.length,
         notificationStatus,
       }),
     )
@@ -278,6 +305,72 @@ export class InboxAgent extends Agent<
     }
 
     return toStoredEmail(row)
+  }
+
+  listEmailAttachments(emailReference: string): StoredEmailAttachment[] {
+    return listStoredAttachments(this, emailReference)
+  }
+
+  async getEmailAttachments(
+    emailReference: string,
+    attachmentIds?: string[],
+  ): Promise<OutgoingEmailAttachment[]> {
+    const email = this.findEmail(emailReference)
+    if (!email) {
+      throw new Error(`Email ${emailReference} was not found.`)
+    }
+    const rows = listStoredAttachmentRows(this, email.id)
+
+    const requested = attachmentIds?.length
+      ? new Set(attachmentIds)
+      : null
+    const selected = requested
+      ? rows.filter((row) => requested.has(row.id))
+      : rows
+
+    if (requested && selected.length !== requested.size) {
+      throw new Error('One or more requested attachments were not found.')
+    }
+
+    const attachments: OutgoingEmailAttachment[] = []
+    for (const row of selected) {
+      const object = await this.env.MAIL_BUCKET.get(row.r2_key)
+      if (!object) {
+        throw new Error(`Attachment ${row.filename} is missing from R2.`)
+      }
+      attachments.push({
+        id: row.id,
+        emailId: row.emailId,
+        filename: row.filename,
+        mimeType: row.mimeType,
+        disposition: row.disposition,
+        contentId: row.contentId,
+        size: row.size,
+        data: await object.arrayBuffer(),
+      })
+    }
+    return attachments
+  }
+
+  private async persistAttachmentObjects(
+    emailId: string,
+    emailShortId: string,
+    attachments: ReturnType<typeof normalizeAttachments>,
+  ): Promise<void> {
+    for (const attachment of attachments) {
+      await this.env.MAIL_BUCKET.put(
+        attachmentR2Key(emailId, attachment.id),
+        attachment.content,
+        {
+          httpMetadata: { contentType: attachment.mimeType },
+          customMetadata: {
+            emailId: emailShortId,
+            attachmentId: attachment.id,
+            filename: attachment.filename,
+          },
+        },
+      )
+    }
   }
 
   listMemories(): PersonalMemory[] {

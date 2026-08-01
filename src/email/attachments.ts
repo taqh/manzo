@@ -1,0 +1,62 @@
+import type { Attachment as ParsedAttachment } from "postal-mime";
+
+export type NormalizedAttachment = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  disposition: "attachment" | "inline" | null;
+  contentId: string | null;
+  content: Uint8Array;
+};
+
+function safeFilename(filename: string | null, index: number): string {
+  const fallback = `attachment-${index + 1}`;
+  const normalized = filename
+    ?.trim()
+    .replace(/[\\/\x00-\x1f]+/g, "_")
+    .replace(/^\.+/, "");
+  return normalized?.slice(0, 240) || fallback;
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value.replace(/\s+/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function attachmentBytes(attachment: ParsedAttachment): Uint8Array {
+  if (attachment.content instanceof Uint8Array) {
+    return attachment.content;
+  }
+
+  if (attachment.content instanceof ArrayBuffer) {
+    return new Uint8Array(attachment.content);
+  }
+
+  if (attachment.encoding === "base64") {
+    return decodeBase64(attachment.content);
+  }
+
+  return new TextEncoder().encode(attachment.content);
+}
+
+export function normalizeAttachments(
+  emailId: string,
+  attachments: ParsedAttachment[],
+): NormalizedAttachment[] {
+  return attachments.map((attachment, index) => ({
+    id: `${emailId}-attachment-${index + 1}`,
+    filename: safeFilename(attachment.filename, index),
+    mimeType: attachment.mimeType || "application/octet-stream",
+    disposition: attachment.disposition ?? null,
+    contentId: attachment.contentId ?? null,
+    content: attachmentBytes(attachment),
+  }));
+}
+
+export function attachmentR2Key(emailId: string, attachmentId: string): string {
+  return `emails/${emailId}/attachments/${attachmentId}`;
+}

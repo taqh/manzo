@@ -14,6 +14,8 @@ email.
 - Workers AI with AI Gateway for model inference and guarded tool calling
 - Telegram delivery and commands through Chat SDK's Telegram adapter
 - Cloudflare Email Service for replies and brand-new messages
+- Attachment metadata and binary storage in private R2, with explicit Telegram
+  sharing
 - Durable drafts, exact-draft confirmations, direct-send safeguards,
   duplicate-send prevention, and `delivery_unknown` locking
 - Deterministic inbox queries and proactive Telegram notifications
@@ -91,6 +93,7 @@ Natural-language examples:
 - “Just send ‘I'll be there at two’ to friend@example.com.”
 - “My timezone is America/New_York.”
 - “Your name is Nimbus.”
+- “Send me the PDF from the latest email.”
 
 For an ordinary draft, say “looks good, send” after reviewing its card. Direct
 sends require explicit send language, a recipient, and usable wording in the
@@ -101,8 +104,8 @@ same allowlisted message.
 - One Telegram chat owns the inbox; this is not a shared helpdesk or a
   multi-tenant agent.
 - It cannot browse the web.
-- Attachments and complete raw mail are preserved, but attachment contents
-  cannot yet be inspected or forwarded.
+- Attachment contents can be listed and explicitly shared into the allowlisted
+  Telegram chat; there is no automatic attachment forwarding.
 - Email Routing and Email Sending are separate Cloudflare setup flows.
 - A successful send requires a provider message ID. Ambiguous outcomes are
   deliberately locked instead of retried automatically.
@@ -134,11 +137,12 @@ troubleshooting.
 src/
   agent/                 durable inbox, AI loop, storage, and guarded tools
     storage/             SQLite schemas and focused storage helpers
-    tools/               guarded email and memory tools
+    tools/               guarded email, attachment, and memory tools
   channels/telegram/     adapter, commands, cards, state, and webhooks
-  email/                 bounded MIME normalization
+  email/                 bounded MIME normalization and attachment handling
+    attachments.ts       attachment normalization and R2 key helpers
   index.ts               Hono HTTP and Cloudflare Email entry points
-fixtures/sample-email.eml safe local inbound-mail fixture
+fixtures/sample-email.eml safe local inbound-mail fixture with attachment
 tests/                    regression coverage for reliability and storage
 wrangler.jsonc            non-secret deployment configuration
 SETUP.md                 full deployment and operations guide

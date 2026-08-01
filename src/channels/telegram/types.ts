@@ -8,8 +8,10 @@ import type {
   InboxPeriod,
   InboxPeriodSummary,
   OwnerProfile,
+  OutgoingEmailAttachment,
   PendingDraft,
   StoredEmail,
+  StoredEmailAttachment,
   StoredEmailSummary,
 } from "@/agent/types";
 
@@ -23,8 +25,15 @@ export type PersonalAgentActions = {
     limit?: number,
   ): MaybePromise<StoredEmailSummary[]>;
   getInboxSummary(period: InboxPeriod): MaybePromise<InboxPeriodSummary>;
+  getEmailAttachments(
+    emailReference: string,
+    attachmentIds?: string[],
+  ): Promise<OutgoingEmailAttachment[]>;
   getProfile(): MaybePromise<OwnerProfile>;
   listEmails(limit?: number): MaybePromise<StoredEmailSummary[]>;
+  listEmailAttachments(
+    emailReference: string,
+  ): MaybePromise<StoredEmailAttachment[]>;
   readEmail(emailReference: string): MaybePromise<StoredEmail | null>;
   respondToChat(input: AgentMessageInput): Promise<AgentChatResponse>;
   resetConversation(conversationId: string): MaybePromise<void>;

@@ -9,6 +9,7 @@ import {
   ACTION_DRAFT_EMAIL,
   ACTION_READ_EMAIL,
   ACTION_SEND_DRAFT,
+  ACTION_SHOW_ATTACHMENTS,
   draftCard,
   formatEmail,
   notificationCard,
@@ -142,7 +143,18 @@ async function postAgentResponse(
     });
     confirmedSend = Boolean(response.sentDraftId);
 
-    await thread.post(response.text);
+    if (response.attachments.length > 0) {
+      await thread.post({
+        markdown: response.text,
+        files: response.attachments.map((attachment) => ({
+          data: attachment.data,
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+        })),
+      });
+    } else {
+      await thread.post(response.text);
+    }
 
     try {
       await thread.setState(operationalStateAfterResponse(response));
@@ -269,7 +281,12 @@ export function createPersonalChat(
   });
 
   chat.onAction(
-    [ACTION_READ_EMAIL, ACTION_DRAFT_EMAIL, ACTION_SEND_DRAFT],
+    [
+      ACTION_READ_EMAIL,
+      ACTION_DRAFT_EMAIL,
+      ACTION_SEND_DRAFT,
+      ACTION_SHOW_ATTACHMENTS,
+    ],
     async (event) => {
       if (event.user.userId !== env.TELEGRAM_CHAT_ID || !event.thread) {
         return;
@@ -288,6 +305,30 @@ export function createPersonalChat(
               ? formatEmail(email)
               : `Email ${emailReference} was not found.`,
           );
+          return;
+        }
+
+        if (event.actionId === ACTION_SHOW_ATTACHMENTS) {
+          const emailReference = event.value ?? "";
+          const email = await host.readEmail(emailReference);
+          if (!email) {
+            await event.thread.post(`Email ${emailReference} was not found.`);
+            return;
+          }
+          const attachments = await host.getEmailAttachments(email.shortId);
+          if (attachments.length === 0) {
+            await event.thread.post("That email does not have any attachments.");
+            return;
+          }
+          await event.thread.setState(selectedEmailState(email.shortId));
+          await event.thread.post({
+            markdown: `Here ${attachments.length === 1 ? "is the attachment" : "are the attachments"} from **${email.subject}**:`,
+            files: attachments.map((attachment) => ({
+              data: attachment.data,
+              filename: attachment.filename,
+              mimeType: attachment.mimeType,
+            })),
+          });
           return;
         }
 

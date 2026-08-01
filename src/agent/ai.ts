@@ -25,6 +25,7 @@ import type {
   AgentMessageInput,
   ConversationMessage,
   InboxPeriodSummary,
+  OutgoingEmailAttachment,
   PersonalMemory,
   StoredEmailSummary,
 } from "@/agent/types";
@@ -190,6 +191,7 @@ function deterministicResponse(
         : input.lastInboxPeriod,
     presentedEmailIds: options.presentedEmailIds ?? input.presentedEmailIds,
     sentDraftId: null,
+    attachments: [],
     model,
   };
 }
@@ -243,6 +245,7 @@ export async function runPersonalAgent(
       lastInboxPeriod: null,
       presentedEmailIds: [],
       sentDraftId: null,
+      attachments: [],
       model: modelId,
     };
   }
@@ -390,6 +393,27 @@ export async function runPersonalAgent(
   });
 
   const sent = toolContext.result.sentDrafts.at(-1) ?? null;
+  let attachments: OutgoingEmailAttachment[] = [];
+  let attachmentDeliveryFailed = false;
+  for (const request of toolContext.result.attachmentRequests) {
+    try {
+      attachments.push(
+        ...(await host.getEmailAttachments(
+          request.emailId,
+          request.attachmentIds,
+        )),
+      );
+    } catch (error) {
+      attachmentDeliveryFailed = true;
+      console.error(
+        JSON.stringify({
+          event: "agent.attachment_load_failed",
+          emailId: request.emailId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        }),
+      );
+    }
+  }
   let text = result.text.trim() || "I finished, but I don’t have a useful response.";
   if (sent) {
     text = "Sent — that email is on its way.";
@@ -400,6 +424,11 @@ export async function runPersonalAgent(
     text = "Here’s the draft. Nothing has been sent yet.";
   } else if (isExplicitDirectSendRequest(userMessage)) {
     text = "I couldn’t complete a direct send from that request. Check the recipient and message content, then try again.";
+  }
+  if (attachments.length > 0) {
+    text = `Here ${attachments.length === 1 ? "is the requested attachment" : "are the requested attachments"}.`;
+  } else if (attachmentDeliveryFailed) {
+    text = "I found the requested attachment, but couldn’t retrieve it from private storage.";
   }
 
   const postconditions = enforceResponsePostconditions(text, {
@@ -426,6 +455,8 @@ export async function runPersonalAgent(
       factualToolsRun: toolContext.result.factualToolsRun,
       draftCount: toolContext.result.drafts.length,
       sent: Boolean(sent?.messageId),
+      attachmentCount: attachments.length,
+      attachmentDeliveryFailed,
       deliveryOutcomeUnknown: toolContext.result.deliveryOutcomeUnknown,
       postconditionViolations: postconditions.violations,
     }),
@@ -441,6 +472,7 @@ export async function runPersonalAgent(
         ? toolContext.result.presentedEmailIds
         : input.presentedEmailIds,
     sentDraftId: sent?.draftId ?? null,
+    attachments,
     model: modelId,
   };
 }
