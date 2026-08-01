@@ -1,0 +1,24 @@
+From: Example Sender <sender@example.net>
+Reply-To: sender@example.net
+To: agent@example.com
+Subject: A small inbox-agent fixture
+Date: Thu, 30 Jul 2026 01:00:00 +0100
+Message-ID: <manzo-fixture-001@example.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="agent-boundary"
+
+--agent-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Hello,
+
+Could you let me know whether you are free for a quick call next week?
+
+Example Sender
+
+--agent-boundary
+Content-Type: text/plain; name="notes.txt"
+Content-Disposition: attachment; filename="notes.txt"
+
+The raw email should preserve this attachment.
+--agent-boundary--
