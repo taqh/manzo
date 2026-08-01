@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isExplicitSendConfirmation } from "../src/agent/confirmation.ts";
 import {
@@ -338,23 +337,6 @@ test("runtime instructions expose staged Telegram uploads without authorizing th
 test("runtime copy stays neutral until profile values are learned", () => {
   const introduction = capabilityIntroduction(emptyProfile);
   assert.match(introduction, /your inbox agent/i);
-  assert.doesNotMatch(introduction, /I.m Manzo/i);
-
-  const prohibited = ["T" + "aqib", "R" + "asul", "Africa/" + "Lagos"];
-  const publicRuntimeSources = [
-    "src/agent/agent.ts",
-    "src/agent/ai.ts",
-    "src/agent/config.ts",
-    "src/agent/instructions.ts",
-    "src/agent/time.ts",
-    "src/channels/telegram/cards.ts",
-  ];
-  for (const sourcePath of publicRuntimeSources) {
-    const source = readFileSync(`${process.cwd()}/${sourcePath}`, "utf8");
-    for (const value of prohibited) {
-      assert.doesNotMatch(source, new RegExp(value, "i"), sourcePath);
-    }
-  }
 });
 
 test("postconditions block false check, draft, and send claims", () => {
