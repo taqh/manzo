@@ -3,7 +3,7 @@ import type { PersonalMemory } from "@/agent/types";
 
 const MAX_MEMORY_COUNT = 100;
 const MAX_MEMORY_KEY_LENGTH = 80;
-const MAX_MEMORY_VALUE_LENGTH = 1_000;
+const MAX_MEMORY_VALUE_LENGTH = 1000;
 
 type MemoryRow = {
   key: string;
@@ -14,10 +14,10 @@ type MemoryRow = {
 
 function toPersonalMemory(row: MemoryRow): PersonalMemory {
   return {
-    key: row.key,
-    value: row.value,
     createdAt: row.created_at,
+    key: row.key,
     updatedAt: row.updated_at,
+    value: row.value,
   };
 }
 
@@ -33,7 +33,7 @@ export function listStoredMemories(host: AgentSqlHost): PersonalMemory[] {
 export function rememberStoredMemory(
   host: AgentSqlHost,
   key: string,
-  value: string,
+  value: string
 ): PersonalMemory {
   const normalizedKey = key.trim();
   const normalizedValue = value.trim();
@@ -43,7 +43,7 @@ export function rememberStoredMemory(
     normalizedKey.length > MAX_MEMORY_KEY_LENGTH
   ) {
     throw new Error(
-      `Memory keys must be between 1 and ${MAX_MEMORY_KEY_LENGTH} characters.`,
+      `Memory keys must be between 1 and ${MAX_MEMORY_KEY_LENGTH} characters.`
     );
   }
   if (
@@ -51,7 +51,7 @@ export function rememberStoredMemory(
     normalizedValue.length > MAX_MEMORY_VALUE_LENGTH
   ) {
     throw new Error(
-      `Memory values must be between 1 and ${MAX_MEMORY_VALUE_LENGTH} characters.`,
+      `Memory values must be between 1 and ${MAX_MEMORY_VALUE_LENGTH} characters.`
     );
   }
 
@@ -59,12 +59,15 @@ export function rememberStoredMemory(
     SELECT key FROM memories WHERE key = ${normalizedKey} LIMIT 1
   `;
   if (existing.length === 0) {
-    const count = host.sql<{ count: number }>`
+    const count =
+      host.sql<{ count: number }>`
       SELECT COUNT(*) AS count FROM memories
     `[0]?.count ?? 0;
 
     if (count >= MAX_MEMORY_COUNT) {
-      throw new Error("Memory is full. Forget an item before adding another one.");
+      throw new Error(
+        "Memory is full. Forget an item before adding another one."
+      );
     }
   }
 
@@ -77,7 +80,7 @@ export function rememberStoredMemory(
       updated_at = excluded.updated_at
     RETURNING key, value, created_at, updated_at
   `;
-  const memory = rows[0];
+  const [memory] = rows;
   if (!memory) {
     throw new Error("The memory could not be saved.");
   }

@@ -7,8 +7,8 @@ import type {
   DraftResult,
   InboxPeriod,
   InboxPeriodSummary,
-  OwnerProfile,
   OutgoingEmailAttachment,
+  OwnerProfile,
   PendingDraft,
   PersonalMemory,
   StoredEmail,
@@ -24,30 +24,30 @@ export type PersonalAgentActions = {
   createDraft(
     emailReference: string,
     body: string,
-    attachmentIds?: string[],
+    attachmentIds?: string[]
   ): MaybePromise<DraftResult>;
   findPreviousEmailsFrom(
     sender: string,
     excludeEmailReference?: string,
-    limit?: number,
+    limit?: number
   ): MaybePromise<StoredEmailSummary[]>;
   getInboxSummary(period: InboxPeriod): MaybePromise<InboxPeriodSummary>;
   getEmailAttachments(
     emailReference: string,
-    attachmentIds?: string[],
+    attachmentIds?: string[]
   ): Promise<OutgoingEmailAttachment[]>;
   getProfile(): MaybePromise<OwnerProfile>;
   listMemories(): MaybePromise<PersonalMemory[]>;
   listEmails(limit?: number): MaybePromise<StoredEmailSummary[]>;
   listEmailAttachments(
-    emailReference: string,
+    emailReference: string
   ): MaybePromise<StoredEmailAttachment[]>;
   listUploadedAttachments(
-    attachmentIds: string[],
+    attachmentIds: string[]
   ): MaybePromise<StoredOutboundAttachment[]>;
   storeTelegramAttachments(
     conversationId: string,
-    uploads: UploadedTelegramAttachment[],
+    uploads: UploadedTelegramAttachment[]
   ): Promise<StoredOutboundAttachment[]>;
   readEmail(emailReference: string): MaybePromise<StoredEmail | null>;
   remember(key: string, value: string): MaybePromise<PersonalMemory>;
@@ -58,15 +58,15 @@ export type PersonalAgentActions = {
   saveConversationTurn(
     conversationId: string,
     userMessage: string,
-    assistantMessage: string,
+    assistantMessage: string
   ): MaybePromise<void>;
   searchEmails(
     query: string,
-    limit?: number,
+    limit?: number
   ): MaybePromise<StoredEmailSummary[]>;
   sendDraft(
     draftId: string,
-    expectedRevision: number,
+    expectedRevision: number
   ): Promise<{
     draftId: string;
     messageId: string;

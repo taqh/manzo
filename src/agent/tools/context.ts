@@ -1,14 +1,14 @@
 import type {
-  AttachmentRequest,
   AgentMessageInput,
+  AttachmentRequest,
   ConversationMessage,
   DraftResult,
   InboxPeriod,
   InboxPeriodSummary,
   NewEmailDraftResult,
+  OutgoingEmailAttachment,
   OwnerProfile,
   OwnerProfileUpdate,
-  OutgoingEmailAttachment,
   PersonalMemory,
   ReplyDraftResult,
   SentDraftResult,
@@ -22,30 +22,30 @@ export type PersonalAiHost = {
   createDraft(
     emailReference: string,
     body: string,
-    attachmentIds?: string[],
+    attachmentIds?: string[]
   ): ReplyDraftResult;
   createNewEmailDraft(
     recipient: string,
     subject: string,
     body: string,
-    attachmentIds?: string[],
+    attachmentIds?: string[]
   ): NewEmailDraftResult;
   findPreviousEmailsFrom(
     sender: string,
     excludeEmailReference?: string,
-    limit?: number,
+    limit?: number
   ): StoredEmailSummary[];
   getInboxSummary(period: InboxPeriod): InboxPeriodSummary;
   getOldestEmail(): StoredEmailSummary | null;
   getEmailAttachments(
     emailReference: string,
-    attachmentIds?: string[],
+    attachmentIds?: string[]
   ): Promise<OutgoingEmailAttachment[]>;
   getProfile(): OwnerProfile;
   forgetMemory(key: string): boolean;
   listConversationMessages(
     conversationId: string,
-    limit?: number,
+    limit?: number
   ): ConversationMessage[];
   listEmails(limit?: number): StoredEmailSummary[];
   listEmailAttachments(emailReference: string): StoredEmailAttachment[];
@@ -56,12 +56,12 @@ export type PersonalAiHost = {
   resetConversation(conversationId: string): void;
   sendDraft(
     draftId: string,
-    expectedRevision: number,
+    expectedRevision: number
   ): Promise<SentDraftResult>;
   saveConversationTurn(
     conversationId: string,
     userMessage: string,
-    assistantMessage: string,
+    assistantMessage: string
   ): void;
   searchEmails(query: string, limit?: number): StoredEmailSummary[];
   updateProfile(update: OwnerProfileUpdate): OwnerProfile;
@@ -90,17 +90,17 @@ export function createPersonalToolContext(
   host: PersonalAiHost,
   input: AgentMessageInput,
   userMessage: string,
-  memories: PersonalMemory[],
+  memories: PersonalMemory[]
 ): PersonalToolContext {
   return {
     host,
     input,
     memories,
     result: {
-      drafts: [],
       attachmentRequests: [],
       consumedAttachmentIds: [],
       deliveryOutcomeUnknown: false,
+      drafts: [],
       factualToolsRun: [],
       presentedEmailIds: [],
       selectedEmailId: input.activeEmailId,

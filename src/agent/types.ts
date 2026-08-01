@@ -13,10 +13,9 @@ export type RuntimeSecrets = {
   TELEGRAM_WEBHOOK_SECRET?: string;
 };
 
-export type AgentEnvironment =
-  & CloudflareBindings
-  & RuntimeConfiguration
-  & RuntimeSecrets;
+export type AgentEnvironment = CloudflareBindings &
+  RuntimeConfiguration &
+  RuntimeSecrets;
 
 export type StoredEmailSummary = {
   id: string;

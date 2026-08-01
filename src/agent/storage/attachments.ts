@@ -1,6 +1,7 @@
-import type { StoredEmailAttachment } from "@/agent/types";
+// biome-ignore-all lint/suspicious/noUnusedExpressions: SQL tagged templates intentionally execute through the Durable Object SQL host.
 import { findStoredEmailRow } from "@/agent/storage/emails";
 import type { AgentSqlHost } from "@/agent/storage/sql";
+import type { StoredEmailAttachment } from "@/agent/types";
 
 export type AttachmentRow = StoredEmailAttachment & {
   r2_key: string;
@@ -12,12 +13,12 @@ type AttachmentInsert = StoredEmailAttachment & {
 
 function toStoredAttachment(row: AttachmentRow): StoredEmailAttachment {
   return {
-    id: row.id,
+    contentId: row.contentId,
+    disposition: row.disposition,
     emailId: row.emailId,
     filename: row.filename,
+    id: row.id,
     mimeType: row.mimeType,
-    disposition: row.disposition,
-    contentId: row.contentId,
     size: row.size,
   };
 }
@@ -33,20 +34,20 @@ function toAttachmentRow(row: {
   r2_key: string;
 }): AttachmentRow {
   return {
-    id: row.id,
+    contentId: row.content_id,
+    disposition: row.disposition,
     emailId: row.email_id,
     filename: row.filename,
+    id: row.id,
     mimeType: row.mime_type,
-    disposition: row.disposition,
-    contentId: row.content_id,
-    size: row.size,
     r2_key: row.r2_key,
+    size: row.size,
   };
 }
 
 export function insertStoredAttachments(
   host: AgentSqlHost,
-  attachments: AttachmentInsert[],
+  attachments: AttachmentInsert[]
 ): void {
   for (const attachment of attachments) {
     host.sql`
@@ -77,7 +78,7 @@ export function insertStoredAttachments(
 
 export function listStoredAttachmentRows(
   host: AgentSqlHost,
-  emailReference: string,
+  emailReference: string
 ): AttachmentRow[] {
   const email = findStoredEmailRow(host, emailReference);
   if (!email) {
@@ -105,7 +106,7 @@ export function listStoredAttachmentRows(
 
 export function listStoredAttachments(
   host: AgentSqlHost,
-  emailReference: string,
+  emailReference: string
 ): StoredEmailAttachment[] {
   return listStoredAttachmentRows(host, emailReference).map(toStoredAttachment);
 }

@@ -8,8 +8,8 @@ import {
 } from "@/agent/config";
 import type { AgentEnvironment } from "@/agent/types";
 
-export { InboxAgent } from "@/agent/agent";
 export { ChatSdkStateAgent } from "agents/chat-sdk";
+export { InboxAgent } from "@/agent/agent";
 
 const app = new Hono<{ Bindings: AgentEnvironment }>();
 
@@ -19,42 +19,42 @@ app.get("/", (context) => {
     getDeploymentConfig(context.env);
   } catch (error) {
     configurationError =
-      error instanceof Error ? error.message : "Worker configuration is invalid.";
+      error instanceof Error
+        ? error.message
+        : "Worker configuration is invalid.";
   }
 
   return context.json(
     {
+      ai: Boolean(context.env.AI),
+      configurationError,
+      email: configurationError ? "not_configured" : "ready",
+      model: context.env.AI_MODEL,
       name: "Manzo inbox agent",
       status: configurationError ? "configuration_required" : "ok",
-      email: configurationError ? "not_configured" : "ready",
-      configurationError,
-      ai: Boolean(context.env.AI),
-      model: context.env.AI_MODEL,
       telegram: Boolean(
         context.env.TELEGRAM_BOT_TOKEN &&
-        context.env.TELEGRAM_CHAT_ID &&
-        context.env.TELEGRAM_WEBHOOK_SECRET,
+          context.env.TELEGRAM_CHAT_ID &&
+          context.env.TELEGRAM_WEBHOOK_SECRET
       ),
     },
-    configurationError ? 503 : 200,
+    configurationError ? 503 : 200
   );
 });
 
 app.post("/webhooks/telegram", async (context) => {
   const agent = await getAgentByName(
     context.env.InboxAgent,
-    INBOX_AGENT_INSTANCE,
+    INBOX_AGENT_INSTANCE
   );
 
   return agent.handleTelegramWebhook(context.req.raw);
 });
 
 export default {
-  fetch: app.fetch,
-
   async email(
     message: ForwardableEmailMessage,
-    env: AgentEnvironment,
+    env: AgentEnvironment
   ): Promise<void> {
     if (!isManagedMailbox(env, message.to)) {
       let reason = "Inbox address is not configured.";
@@ -71,10 +71,8 @@ export default {
     }
 
     await routeAgentEmail(message, env, {
-      resolver: createCatchAllEmailResolver(
-        "InboxAgent",
-        INBOX_AGENT_INSTANCE,
-      ),
+      resolver: createCatchAllEmailResolver("InboxAgent", INBOX_AGENT_INSTANCE),
     });
   },
+  fetch: app.fetch,
 } satisfies ExportedHandler<AgentEnvironment>;

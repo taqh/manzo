@@ -18,26 +18,26 @@ type DateParts = {
 
 function partsAt(timestamp: number, timeZone: string): DateParts {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
     hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    timeZone,
+    year: "numeric",
   }).formatToParts(new Date(timestamp));
 
   const value = (type: Intl.DateTimeFormatPartTypes): number =>
     Number(parts.find((part) => part.type === type)?.value ?? "0");
 
   return {
-    year: value("year"),
-    month: value("month"),
     day: value("day"),
     hour: value("hour"),
     minute: value("minute"),
+    month: value("month"),
     second: value("second"),
+    year: value("year"),
   };
 }
 
@@ -49,17 +49,17 @@ function offsetAt(timestamp: number, timeZone: string): number {
     parts.day,
     parts.hour,
     parts.minute,
-    parts.second,
+    parts.second
   );
 
-  return representedAsUtc - Math.floor(timestamp / 1_000) * 1_000;
+  return representedAsUtc - Math.floor(timestamp / 1000) * 1000;
 }
 
 function zonedMidnightUtc(
   year: number,
   month: number,
   day: number,
-  timeZone: string,
+  timeZone: string
 ): number {
   const wallClockMidnight = Date.UTC(year, month - 1, day);
   let candidate = wallClockMidnight - offsetAt(wallClockMidnight, timeZone);
@@ -73,58 +73,53 @@ function addCalendarDays(
   year: number,
   month: number,
   day: number,
-  amount: number,
+  amount: number
 ): Pick<DateParts, "year" | "month" | "day"> {
   const shifted = new Date(Date.UTC(year, month - 1, day + amount));
   return {
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
     day: shifted.getUTCDate(),
+    month: shifted.getUTCMonth() + 1,
+    year: shifted.getUTCFullYear(),
   };
 }
 
 export function inboxPeriodRange(
   period: InboxPeriod,
   now = Date.now(),
-  timeZone = DEFAULT_TIME_ZONE,
+  timeZone = DEFAULT_TIME_ZONE
 ): TimeRange {
   const localNow = partsAt(now, timeZone);
   const startDate = addCalendarDays(
     localNow.year,
     localNow.month,
     localNow.day,
-    period === "yesterday" ? -1 : 0,
+    period === "yesterday" ? -1 : 0
   );
   const endDate = addCalendarDays(
     startDate.year,
     startDate.month,
     startDate.day,
-    1,
+    1
   );
 
   return {
+    endAt: zonedMidnightUtc(endDate.year, endDate.month, endDate.day, timeZone),
     startAt: zonedMidnightUtc(
       startDate.year,
       startDate.month,
       startDate.day,
-      timeZone,
-    ),
-    endAt: zonedMidnightUtc(
-      endDate.year,
-      endDate.month,
-      endDate.day,
-      timeZone,
+      timeZone
     ),
   };
 }
 
 export function formatLocalTimestamp(
   timestamp: number,
-  timeZone = DEFAULT_TIME_ZONE,
+  timeZone = DEFAULT_TIME_ZONE
 ): string {
   return new Intl.DateTimeFormat("en-GB", {
-    timeZone,
     dateStyle: "full",
     timeStyle: "long",
+    timeZone,
   }).format(new Date(timestamp));
 }

@@ -10,31 +10,28 @@ export type EnforcedResponse = {
   violations: string[];
 };
 
+const CLAIMS_CHECK_PATTERN =
+  /\b(?:i (?:checked|looked|found)|you (?:have|received|got)|no (?:new )?(?:emails?|mail)|in your inbox)\b/i;
+const CLAIMS_DRAFT_PATTERN =
+  /\b(?:i(?:'ve| have)? (?:drafted|prepared|created)|draft (?:is|was) ready)\b/i;
+const CLAIMS_SEND_PATTERN =
+  /\b(?:i(?:'ve| have)? sent|email (?:was|is|has been) sent|on its way)\b/i;
+const DENIES_SEND_CAPABILITY_PATTERN =
+  /\b(?:i (?:can(?:not|'t)|am unable to)|my tools (?:can(?:not|'t)|do not))\b[\s\S]{0,80}\b(?:send|sending)\b[\s\S]{0,30}\b(?:emails?|mails?|reply|it)\b/i;
+const DENIES_NOTIFICATION_CAPABILITY_PATTERN =
+  /\b(?:i (?:can(?:not|'t)|am unable to))\b[\s\S]{0,80}\b(?:watch|monitor|notify|real time)\b/i;
+
 export function enforceResponsePostconditions(
   text: string,
-  conditions: ResponsePostconditions,
+  conditions: ResponsePostconditions
 ): EnforcedResponse {
   const violations: string[] = [];
-  const claimsCheck =
-    /\b(?:i (?:checked|looked|found)|you (?:have|received|got)|no (?:new )?(?:emails?|mail)|in your inbox)\b/i.test(
-      text,
-    );
-  const claimsDraft =
-    /\b(?:i(?:'ve| have)? (?:drafted|prepared|created)|draft (?:is|was) ready)\b/i.test(
-      text,
-    );
-  const claimsSend =
-    /\b(?:i(?:'ve| have)? sent|email (?:was|is|has been) sent|on its way)\b/i.test(
-      text,
-    );
-  const deniesSendCapability =
-    /\b(?:i (?:can(?:not|'t)|am unable to)|my tools (?:can(?:not|'t)|do not))\b[\s\S]{0,80}\b(?:send|sending)\b[\s\S]{0,30}\b(?:emails?|mails?|reply|it)\b/i.test(
-      text,
-    );
+  const claimsCheck = CLAIMS_CHECK_PATTERN.test(text);
+  const claimsDraft = CLAIMS_DRAFT_PATTERN.test(text);
+  const claimsSend = CLAIMS_SEND_PATTERN.test(text);
+  const deniesSendCapability = DENIES_SEND_CAPABILITY_PATTERN.test(text);
   const deniesNotificationCapability =
-    /\b(?:i (?:can(?:not|'t)|am unable to))\b[\s\S]{0,80}\b(?:watch|monitor|notify|real time)\b/i.test(
-      text,
-    );
+    DENIES_NOTIFICATION_CAPABILITY_PATTERN.test(text);
 
   if (conditions.factualIntent && claimsCheck && !conditions.factualDataRead) {
     violations.push("unchecked_email_claim");

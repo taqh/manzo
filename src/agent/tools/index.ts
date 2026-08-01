@@ -1,6 +1,6 @@
+import type { PersonalToolContext } from "@/agent/tools/context";
 import { createEmailTools } from "@/agent/tools/email";
 import { createMemoryTools } from "@/agent/tools/memory";
-import type { PersonalToolContext } from "@/agent/tools/context";
 
 export function createAgentTools(context: PersonalToolContext) {
   return {

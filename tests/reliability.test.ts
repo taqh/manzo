@@ -31,8 +31,8 @@ import {
 } from "../src/channels/telegram/operational-state.ts";
 
 const emptyProfile = {
-  ownerName: null,
   agentName: null,
+  ownerName: null,
   timeZone: null,
   updatedAt: null,
 } as const;
@@ -44,85 +44,112 @@ const baseContext = {
   presentedEmailCount: 0,
 } as const;
 
+const AUTO_NOTIFY_PATTERN = /automatically notify/i;
+const HELP_COMMAND_PATTERN = /\/help/i;
+const TELEGRAM_NOTIFICATION_PATTERN = /triggers a Telegram notification/i;
+const AUTO_MAIL_PATTERN = /automatically when new mail arrives/i;
+const LOOKS_GOOD_SEND_PATTERN = /looks good, send/i;
+const JUST_SEND_PATTERN = /just send/i;
+const REMEMBER_PREFERENCES_PATTERN = /Remember stable preferences/i;
+const WEB_BROWSING_PATTERN = /web browsing/i;
+const SHARE_ATTACHMENTS_PATTERN = /share attachments/i;
+const UPLOADED_FILES_PATTERN = /attach files uploaded/i;
+const LIST_OR_SHARE_PATTERN = /list them|share them/i;
+const OUTGOING_DRAFT_PATTERN = /outgoing email draft/i;
+const RESUME_PATTERN = /resume\.pdf/;
+const STAGED_PRIVATELY_PATTERN = /staged privately/;
+const EXPLICIT_ATTACHMENT_PATTERN =
+  /explicitly asks to use, include, or attach/;
+const INBOX_AGENT_PATTERN = /your inbox agent/i;
+const COULD_NOT_VERIFY_PATTERN = /couldn.t verify/i;
+const COULD_NOT_CREATE_PATTERN = /wasn.t able to create/i;
+const NO_CONFIRMED_SEND_PATTERN = /not receive a confirmed send result/i;
+const SEND_CAPABILITY_PATTERN = /I can compose and send email/i;
+
 test("profile timezone today and yesterday use local calendar boundaries", () => {
   const now = Date.parse("2026-08-01T00:30:00.000Z");
   assert.deepEqual(inboxPeriodRange("today", now, "America/New_York"), {
-    startAt: Date.parse("2026-07-31T04:00:00.000Z"),
     endAt: Date.parse("2026-08-01T04:00:00.000Z"),
+    startAt: Date.parse("2026-07-31T04:00:00.000Z"),
   });
   assert.deepEqual(inboxPeriodRange("yesterday", now, "America/New_York"), {
-    startAt: Date.parse("2026-07-30T04:00:00.000Z"),
     endAt: Date.parse("2026-07-31T04:00:00.000Z"),
+    startAt: Date.parse("2026-07-30T04:00:00.000Z"),
   });
   assert.deepEqual(inboxPeriodRange("today", now), {
-    startAt: Date.parse("2026-08-01T00:00:00.000Z"),
     endAt: Date.parse("2026-08-02T00:00:00.000Z"),
+    startAt: Date.parse("2026-08-01T00:00:00.000Z"),
   });
 });
 
 test("profile learning accepts only explicit trusted declarations", () => {
   assert.deepEqual(
     learnProfileFromTrustedTelegramMessage(
-      "My name is Avery. Your name is Nimbus. My timezone is Europe/Paris.",
+      "My name is Avery. Your name is Nimbus. My timezone is Europe/Paris."
     ),
     {
-      ownerName: "Avery",
       agentName: "Nimbus",
+      ownerName: "Avery",
       timeZone: "Europe/Paris",
-    },
+    }
   );
   assert.deepEqual(learnProfileFromTrustedTelegramMessage("I'm tired"), {});
   assert.deepEqual(
     learnProfileFromTrustedTelegramMessage(
-      "> My name is someone else\nFrom: sender@example.net",
+      "> My name is someone else\nFrom: sender@example.net"
     ),
-    {},
+    {}
   );
   assert.deepEqual(
     learnProfileFromTrustedTelegramMessage("My timezone is Not/AZone"),
-    {},
+    {}
   );
 });
 
 test("today checks and repeat checks route deterministically", () => {
   assert.deepEqual(
-    classifyAgentIntent("How many emails have I received today so far?", baseContext),
-    { kind: "inbox_period", period: "today" },
+    classifyAgentIntent(
+      "How many emails have I received today so far?",
+      baseContext
+    ),
+    { kind: "inbox_period", period: "today" }
   );
   assert.deepEqual(
-    classifyAgentIntent("Check", { ...baseContext, lastInboxPeriod: "yesterday" }),
-    { kind: "inbox_period", period: "yesterday" },
+    classifyAgentIntent("Check", {
+      ...baseContext,
+      lastInboxPeriod: "yesterday",
+    }),
+    { kind: "inbox_period", period: "yesterday" }
   );
 });
 
 test("latest email requests are all-time and period corrections clear today", () => {
   assert.deepEqual(
     classifyAgentIntent("What was the last email we received?", baseContext),
-    { kind: "latest_email" },
+    { kind: "latest_email" }
   );
   assert.deepEqual(
     classifyAgentIntent("Show me the most recent stored email", baseContext),
-    { kind: "latest_email" },
+    { kind: "latest_email" }
   );
   assert.deepEqual(
     classifyAgentIntent("Doesn’t have to be today", {
       ...baseContext,
       lastInboxPeriod: "today",
     }),
-    { kind: "latest_email" },
+    { kind: "latest_email" }
   );
   assert.deepEqual(
     classifyAgentIntent("Did I receive any emails?", baseContext),
-    { kind: "email_factual" },
+    { kind: "email_factual" }
   );
   assert.deepEqual(
     classifyAgentIntent("Show my latest email today", baseContext),
-    { kind: "inbox_period", period: "today" },
+    { kind: "inbox_period", period: "today" }
   );
-  assert.deepEqual(
-    classifyAgentIntent("List my latest emails", baseContext),
-    { kind: "email_factual" },
-  );
+  assert.deepEqual(classifyAgentIntent("List my latest emails", baseContext), {
+    kind: "email_factual",
+  });
 });
 
 test("oldest email requests use the complete-inbox boundary query", () => {
@@ -137,23 +164,25 @@ test("oldest email requests use the complete-inbox boundary query", () => {
   }
   assert.deepEqual(
     classifyAgentIntent("Show the oldest email today", baseContext),
-    { kind: "inbox_period", period: "today" },
+    { kind: "inbox_period", period: "today" }
   );
 });
 
 test("factual email intents force a read tool on the first model step", () => {
   assert.equal(
-    forcedToolForIntent(classifyAgentIntent("List my latest emails", baseContext)),
-    "listEmails",
+    forcedToolForIntent(
+      classifyAgentIntent("List my latest emails", baseContext)
+    ),
+    "listEmails"
   );
   assert.equal(
     forcedToolForIntent(
       classifyAgentIntent("Have they emailed us before?", {
         ...baseContext,
         hasActiveEmail: true,
-      }),
+      })
     ),
-    "checkPreviousCorrespondence",
+    "checkPreviousCorrespondence"
   );
 });
 
@@ -176,18 +205,21 @@ test("direct sends require explicit wording and usable content", () => {
   });
   assert.equal(
     authorizedDirectSendBody('Just send "hello there" to friend@example.com'),
-    "hello there",
+    "hello there"
   );
   assert.equal(directSendBodyMatches(direct, "Hello there."), true);
-  assert.equal(directSendBodyMatches(direct, "Hello there, hope you're well."), false);
+  assert.equal(
+    directSendBodyMatches(direct, "Hello there, hope you're well."),
+    false
+  );
 
   assert.equal(
     isExplicitDirectSendRequest("Email friend@example.com about tomorrow"),
-    false,
+    false
   );
   assert.equal(
     hasUsableDirectSendContent("Just send an email to friend@example.com"),
-    false,
+    false
   );
   assert.equal(hasUsableDirectSendContent("just send it"), false);
 });
@@ -203,7 +235,10 @@ test("previewed drafts accept natural conversational confirmations", () => {
   ]) {
     assert.equal(isExplicitSendConfirmation(message), true, message);
   }
-  assert.equal(isExplicitSendConfirmation("change the body and send it"), false);
+  assert.equal(
+    isExplicitSendConfirmation("change the body and send it"),
+    false
+  );
 });
 
 test("explicit email selection wins and a different direct send clears stale pending state", () => {
@@ -214,10 +249,10 @@ test("explicit email selection wins and a different direct send clears stale pen
   assert.equal(
     resolveReplyReference({
       activeEmailId: "email-b",
-      presentedEmailIds: ["email-a"],
       lastNotificationEmailId: "email-c",
+      presentedEmailIds: ["email-a"],
     }),
-    "email-b",
+    "email-b"
   );
   assert.deepEqual(
     operationalStateAfterResponse({
@@ -231,7 +266,7 @@ test("explicit email selection wins and a different direct send clears stale pen
       lastInboxPeriod: null,
       pendingDraft: null,
       presentedEmailIds: ["email-b"],
-    },
+    }
   );
 });
 
@@ -241,7 +276,7 @@ test("reset is deliberately narrow and versioned history ignores old turns", () 
   assert.equal(isConversationResetRequest("forget everything about me"), false);
   assert.equal(
     scopedConversationId("telegram:123"),
-    `${CONVERSATION_RUNTIME_VERSION}:telegram:123`,
+    `${CONVERSATION_RUNTIME_VERSION}:telegram:123`
   );
 });
 
@@ -249,9 +284,9 @@ test("deadline wording does not get hijacked as correspondence history", () => {
   assert.deepEqual(
     classifyAgentIntent(
       "Draft an email to friend@example.com before tomorrow",
-      baseContext,
+      baseContext
     ),
-    { kind: "other" },
+    { kind: "other" }
   );
 });
 
@@ -273,40 +308,48 @@ test("runtime capabilities truthfully include proactive notification and sending
   assert.equal(capabilities.sendEmail, true);
   assert.equal(capabilities.browseWeb, false);
   assert.equal(capabilities.inspectAttachments, true);
-  assert.match(capabilityIntroduction(emptyProfile), /automatically notify/i);
-  assert.match(capabilityIntroduction(emptyProfile), /\/help/i);
+  assert.match(capabilityIntroduction(emptyProfile), AUTO_NOTIFY_PATTERN);
+  assert.match(capabilityIntroduction(emptyProfile), HELP_COMMAND_PATTERN);
   assert.match(
     deterministicCapabilityResponse("Cool, lmk if any comes up") ?? "",
-    /triggers a Telegram notification/i,
+    TELEGRAM_NOTIFICATION_PATTERN
   );
 });
 
 test("help lists natural capabilities and every Telegram command", () => {
   const help = helpMessage();
-  for (const command of ["/start", "/latest", "/read", "/draft", "/memory", "/reset", "/help"]) {
+  for (const command of [
+    "/start",
+    "/latest",
+    "/read",
+    "/draft",
+    "/memory",
+    "/reset",
+    "/help",
+  ]) {
     assert.match(help, new RegExp(command.replace("/", "\\/")));
   }
-  assert.match(help, /automatically when new mail arrives/i);
-  assert.match(help, /looks good, send/i);
-  assert.match(help, /just send/i);
-  assert.match(help, /Remember stable preferences/i);
-  assert.match(help, /web browsing/i);
-  assert.match(help, /share attachments/i);
-  assert.match(help, /attach files uploaded/i);
+  assert.match(help, AUTO_MAIL_PATTERN);
+  assert.match(help, LOOKS_GOOD_SEND_PATTERN);
+  assert.match(help, JUST_SEND_PATTERN);
+  assert.match(help, REMEMBER_PREFERENCES_PATTERN);
+  assert.match(help, WEB_BROWSING_PATTERN);
+  assert.match(help, SHARE_ATTACHMENTS_PATTERN);
+  assert.match(help, UPLOADED_FILES_PATTERN);
 });
 
 test("attachment requests are not mistaken for capability questions", () => {
   assert.equal(
     deterministicCapabilityResponse("Can you show me the attachment?"),
-    null,
+    null
   );
   assert.match(
     deterministicCapabilityResponse("Can you inspect attachments?") ?? "",
-    /list them|share them/i,
+    LIST_OR_SHARE_PATTERN
   );
   assert.match(
     deterministicCapabilityResponse("Can you attach files to an email?") ?? "",
-    /outgoing email draft/i,
+    OUTGOING_DRAFT_PATTERN
   );
 });
 
@@ -317,9 +360,9 @@ test("runtime instructions expose staged Telegram uploads without authorizing th
     memories: [],
     pendingAttachments: [
       {
-        id: "tg_resume",
         conversationId: "telegram:owner",
         filename: "resume.pdf",
+        id: "tg_resume",
         mimeType: "application/pdf",
         size: 1024,
       },
@@ -329,14 +372,14 @@ test("runtime instructions expose staged Telegram uploads without authorizing th
     toolNames: ["createDraft", "createNewEmailDraft", "listPendingAttachments"],
   });
 
-  assert.match(runtime, /resume\.pdf/);
-  assert.match(runtime, /staged privately/);
-  assert.match(runtime, /explicitly asks to use, include, or attach/);
+  assert.match(runtime, RESUME_PATTERN);
+  assert.match(runtime, STAGED_PRIVATELY_PATTERN);
+  assert.match(runtime, EXPLICIT_ATTACHMENT_PATTERN);
 });
 
 test("runtime copy stays neutral until profile values are learned", () => {
   const introduction = capabilityIntroduction(emptyProfile);
-  assert.match(introduction, /your inbox agent/i);
+  assert.match(introduction, INBOX_AGENT_PATTERN);
 });
 
 test("postconditions block false check, draft, and send claims", () => {
@@ -347,7 +390,7 @@ test("postconditions block false check, draft, and send claims", () => {
       factualIntent: true,
       sentMessageId: null,
     }).text,
-    /couldn.t verify/i,
+    COULD_NOT_VERIFY_PATTERN
   );
   assert.match(
     enforceResponsePostconditions("I've prepared the draft.", {
@@ -356,7 +399,7 @@ test("postconditions block false check, draft, and send claims", () => {
       factualIntent: false,
       sentMessageId: null,
     }).text,
-    /wasn.t able to create/i,
+    COULD_NOT_CREATE_PATTERN
   );
   assert.match(
     enforceResponsePostconditions("I've sent the email; it is on its way.", {
@@ -365,7 +408,7 @@ test("postconditions block false check, draft, and send claims", () => {
       factualIntent: false,
       sentMessageId: null,
     }).text,
-    /not receive a confirmed send result/i,
+    NO_CONFIRMED_SEND_PATTERN
   );
   assert.match(
     enforceResponsePostconditions("I can't send emails with my tools.", {
@@ -374,6 +417,6 @@ test("postconditions block false check, draft, and send claims", () => {
       factualIntent: false,
       sentMessageId: null,
     }).text,
-    /I can compose and send email/i,
+    SEND_CAPABILITY_PATTERN
   );
 });

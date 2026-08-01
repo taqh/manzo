@@ -1,5 +1,6 @@
-import type { StoredOutboundAttachment } from "@/agent/types";
+// biome-ignore-all lint/suspicious/noUnusedExpressions: SQL tagged templates intentionally execute through the Durable Object SQL host.
 import type { AgentSqlHost } from "@/agent/storage/sql";
+import type { StoredOutboundAttachment } from "@/agent/types";
 
 export type OutboundAttachmentRow = StoredOutboundAttachment & {
   r2_key: string;
@@ -10,12 +11,12 @@ type OutboundAttachmentInsert = StoredOutboundAttachment & {
 };
 
 function toStoredAttachment(
-  row: OutboundAttachmentRow,
+  row: OutboundAttachmentRow
 ): StoredOutboundAttachment {
   return {
-    id: row.id,
     conversationId: row.conversationId,
     filename: row.filename,
+    id: row.id,
     mimeType: row.mimeType,
     size: row.size,
   };
@@ -30,18 +31,18 @@ function toAttachmentRow(row: {
   r2_key: string;
 }): OutboundAttachmentRow {
   return {
-    id: row.id,
     conversationId: row.conversation_id,
     filename: row.filename,
+    id: row.id,
     mimeType: row.mime_type,
-    size: row.size,
     r2_key: row.r2_key,
+    size: row.size,
   };
 }
 
 export function insertOutboundAttachments(
   host: AgentSqlHost,
-  attachments: OutboundAttachmentInsert[],
+  attachments: OutboundAttachmentInsert[]
 ): void {
   for (const attachment of attachments) {
     host.sql`
@@ -70,7 +71,7 @@ export function insertOutboundAttachments(
 
 export function listOutboundAttachmentRows(
   host: AgentSqlHost,
-  attachmentIds: string[],
+  attachmentIds: string[]
 ): OutboundAttachmentRow[] {
   const rows: OutboundAttachmentRow[] = [];
   for (const attachmentId of attachmentIds) {
@@ -87,7 +88,7 @@ export function listOutboundAttachmentRows(
       WHERE id = ${attachmentId}
       LIMIT 1
     `;
-    const row = matches[0];
+    const [row] = matches;
     if (row) {
       rows.push(toAttachmentRow(row));
     }
@@ -97,17 +98,17 @@ export function listOutboundAttachmentRows(
 
 export function listOutboundAttachments(
   host: AgentSqlHost,
-  attachmentIds: string[],
+  attachmentIds: string[]
 ): StoredOutboundAttachment[] {
   return listOutboundAttachmentRows(host, attachmentIds).map(
-    toStoredAttachment,
+    toStoredAttachment
   );
 }
 
 export function linkAttachmentsToDraft(
   host: AgentSqlHost,
   draftId: string,
-  attachmentIds: string[],
+  attachmentIds: string[]
 ): void {
   for (const attachmentId of attachmentIds) {
     host.sql`
@@ -120,7 +121,7 @@ export function linkAttachmentsToDraft(
 
 export function listDraftAttachmentRows(
   host: AgentSqlHost,
-  draftId: string,
+  draftId: string
 ): OutboundAttachmentRow[] {
   const rows = host.sql<{
     id: string;
@@ -141,7 +142,7 @@ export function listDraftAttachmentRows(
 
 export function listDraftAttachments(
   host: AgentSqlHost,
-  draftId: string,
+  draftId: string
 ): StoredOutboundAttachment[] {
   return listDraftAttachmentRows(host, draftId).map(toStoredAttachment);
 }

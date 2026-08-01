@@ -1,5 +1,6 @@
 import type { CardElement, Thread } from "chat";
 import { capabilityIntroduction, helpMessage } from "@/agent/instructions";
+import type { PersonalMemory } from "@/agent/types";
 import {
   draftCard,
   formatEmail,
@@ -7,7 +8,6 @@ import {
   toPendingDraft,
 } from "@/channels/telegram/cards";
 import { selectedEmailState } from "@/channels/telegram/operational-state";
-import type { PersonalMemory } from "@/agent/types";
 import type {
   PersonalAgentActions,
   PersonalThreadState,
@@ -18,30 +18,34 @@ export type Command = {
   arguments: string;
 };
 
+const COMMAND_PATTERN =
+  /^\/([a-z][a-z0-9_]*)(?:@[a-z0-9_]+)?(?:\s+([\s\S]*))?$/i;
+const UPLOADED_ATTACHMENT_INTENT_PATTERN =
+  /\b(?:attach|include|use|with)\b[\s\S]{0,100}\b(?:file|files|document|documents|pdf|image|images|photo|photos|resume|cv|this|these)\b/i;
+const PROFILE_MEMORY_KEY_PATTERN =
+  /(?:^|[_ -])(?:name|owner|agent|timezone|time zone)(?:$|[_ -])/i;
+const WHITESPACE_PATTERN = /\s+/;
+
 type CommandResult = {
   content: string | CardElement;
   state?: Partial<PersonalThreadState>;
 };
 
 export function parseCommand(text: string): Command | null {
-  const match = text
-    .trim()
-    .match(/^\/([a-z][a-z0-9_]*)(?:@[a-z0-9_]+)?(?:\s+([\s\S]*))?$/i);
+  const match = text.trim().match(COMMAND_PATTERN);
 
   if (!match?.[1]) {
     return null;
   }
 
   return {
-    name: `/${match[1].toLowerCase()}`,
     arguments: match[2]?.trim() ?? "",
+    name: `/${match[1].toLowerCase()}`,
   };
 }
 
 function hasUploadedAttachmentIntent(text: string): boolean {
-  return /\b(?:attach|include|use|with)\b[\s\S]{0,100}\b(?:file|files|document|documents|pdf|image|images|photo|photos|resume|cv|this|these)\b/i.test(
-    text,
-  );
+  return UPLOADED_ATTACHMENT_INTENT_PATTERN.test(text);
 }
 
 function formatMemories(memories: PersonalMemory[]): string {
@@ -52,7 +56,7 @@ function formatMemories(memories: PersonalMemory[]): string {
   const lines = ["Saved generic memories:"];
   for (const memory of memories) {
     const line = `• ${memory.key}: ${memory.value}`;
-    if ([...lines, line].join("\n").length > 3_500) {
+    if ([...lines, line].join("\n").length > 3500) {
       lines.push("• More memories are saved but not shown here.");
       break;
     }
@@ -60,21 +64,20 @@ function formatMemories(memories: PersonalMemory[]): string {
   }
   lines.push(
     "",
-    "Use /memory forget <key> or /memory set <key> <value> to manage one.",
+    "Use /memory forget <key> or /memory set <key> <value> to manage one."
   );
   return lines.join("\n");
 }
 
 function isProfileMemoryKey(key: string): boolean {
-  return /(?:^|[_ -])(?:name|owner|agent|timezone|time zone)(?:$|[_ -])/i.test(
-    key,
-  );
+  return PROFILE_MEMORY_KEY_PATTERN.test(key);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This is the small command dispatcher for Telegram's supported commands.
 async function executeCommand(
   agent: PersonalAgentActions,
   command: Command,
-  pendingAttachmentIds: string[] = [],
+  pendingAttachmentIds: string[] = []
 ): Promise<CommandResult> {
   if (command.name === "/start") {
     return { content: capabilityIntroduction(await agent.getProfile()) };
@@ -85,7 +88,9 @@ async function executeCommand(
   }
 
   if (command.name === "/memory") {
-    const [subcommand, ...rest] = command.arguments.split(/\s+/).filter(Boolean);
+    const [subcommand, ...rest] = command.arguments
+      .split(WHITESPACE_PATTERN)
+      .filter(Boolean);
     const argument = rest.join(" ").trim();
 
     if (!subcommand || subcommand === "list") {
@@ -173,20 +178,16 @@ async function executeCommand(
     const attachmentIds = hasUploadedAttachmentIntent(body)
       ? pendingAttachmentIds
       : [];
-    const draft = await agent.createDraft(
-      emailReference,
-      body,
-      attachmentIds,
-    );
+    const draft = await agent.createDraft(emailReference, body, attachmentIds);
     return {
       content: draftCard(draft),
       state: {
         activeEmailId:
           draft.kind === "reply" ? draft.emailShortId : emailReference,
-        pendingDraft: toPendingDraft(draft),
         pendingAttachmentIds: pendingAttachmentIds.filter(
-          (attachmentId) => !attachmentIds.includes(attachmentId),
+          (attachmentId) => !attachmentIds.includes(attachmentId)
         ),
+        pendingDraft: toPendingDraft(draft),
       },
     };
   }
@@ -200,7 +201,7 @@ export async function postCommandResult(
   target: Thread<PersonalThreadState>,
   agent: PersonalAgentActions,
   command: Command,
-  newlyUploadedAttachmentIds: string[] = [],
+  newlyUploadedAttachmentIds: string[] = []
 ): Promise<void> {
   try {
     const state = (await target.state) as PersonalThreadState | null;
@@ -220,13 +221,13 @@ export async function postCommandResult(
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "chat.command_failed",
         command: command.name,
         error: error instanceof Error ? error.message : "Unknown error",
-      }),
+        event: "chat.command_failed",
+      })
     );
     await target.post(
-      "That command failed. Check the Worker logs and try again.",
+      "That command failed. Check the Worker logs and try again."
     );
   }
 }

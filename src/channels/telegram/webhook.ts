@@ -41,21 +41,21 @@ async function readBoundedRequest(request: Request): Promise<Request> {
   }
 
   return new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
     body,
+    headers: request.headers,
+    method: request.method,
   });
 }
 
 export async function handleTelegramWebhook(
   chat: PersonalChat | null,
   request: Request,
-  waitUntil: (task: Promise<unknown>) => void,
+  waitUntil: (task: Promise<unknown>) => void
 ): Promise<Response> {
   if (!chat) {
     return Response.json(
       { error: "Telegram is not configured." },
-      { status: 503 },
+      { status: 503 }
     );
   }
 
@@ -69,13 +69,13 @@ export async function handleTelegramWebhook(
 
     console.error(
       JSON.stringify({
-        event: "chat.webhook_failed",
         error: error instanceof Error ? error.message : "Unknown error",
-      }),
+        event: "chat.webhook_failed",
+      })
     );
     return Response.json(
       { error: "Webhook processing failed." },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

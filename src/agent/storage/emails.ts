@@ -35,24 +35,24 @@ function safeEmailLimit(limit: number): number {
 
 export function toStoredEmail(row: EmailRow): StoredEmail {
   return {
-    id: row.id,
-    shortId: row.short_id,
-    mailbox: row.mailbox,
-    sender: row.sender,
-    senderName: row.sender_name,
-    replyTo: row.reply_to,
-    subject: row.subject,
-    messageId: row.message_id,
-    sentAt: row.sent_at,
-    textBody: row.text_body,
+    attachmentCount: row.attachment_count,
     htmlBody: row.html_body,
+    id: row.id,
+    isAutoReply: row.is_auto_reply === 1,
+    mailbox: row.mailbox,
+    messageId: row.message_id,
+    notificationStatus: row.notification_status,
     rawKey: row.raw_key,
     rawSize: row.raw_size,
-    attachmentCount: row.attachment_count,
-    isAutoReply: row.is_auto_reply === 1,
-    receivedAt: row.received_at,
     readAt: row.read_at,
-    notificationStatus: row.notification_status,
+    receivedAt: row.received_at,
+    replyTo: row.reply_to,
+    sender: row.sender,
+    senderName: row.sender_name,
+    sentAt: row.sent_at,
+    shortId: row.short_id,
+    subject: row.subject,
+    textBody: row.text_body,
   };
 }
 
@@ -60,22 +60,22 @@ function toStoredEmailSummary(row: EmailRow): StoredEmailSummary {
   const email = toStoredEmail(row);
 
   return {
+    attachmentCount: email.attachmentCount,
     id: email.id,
-    shortId: email.shortId,
     mailbox: email.mailbox,
+    notificationStatus: email.notificationStatus,
+    readAt: email.readAt,
+    receivedAt: email.receivedAt,
     sender: email.sender,
     senderName: email.senderName,
+    shortId: email.shortId,
     subject: email.subject,
-    receivedAt: email.receivedAt,
-    attachmentCount: email.attachmentCount,
-    readAt: email.readAt,
-    notificationStatus: email.notificationStatus,
   };
 }
 
 export function findStoredEmailRow(
   host: AgentSqlHost,
-  emailReference: string,
+  emailReference: string
 ): EmailRow | null {
   const rows = host.sql<EmailRow>`
     SELECT *
@@ -89,7 +89,7 @@ export function findStoredEmailRow(
 
 export function findStoredEmail(
   host: AgentSqlHost,
-  emailReference: string,
+  emailReference: string
 ): StoredEmail | null {
   const row = findStoredEmailRow(host, emailReference);
   return row ? toStoredEmail(row) : null;
@@ -97,7 +97,7 @@ export function findStoredEmail(
 
 export function listStoredEmails(
   host: AgentSqlHost,
-  limit = 10,
+  limit = 10
 ): StoredEmailSummary[] {
   const rows = host.sql<EmailRow>`
     SELECT *
@@ -110,7 +110,7 @@ export function listStoredEmails(
 }
 
 export function findOldestStoredEmail(
-  host: AgentSqlHost,
+  host: AgentSqlHost
 ): StoredEmailSummary | null {
   const rows = host.sql<EmailRow>`
     SELECT *
@@ -132,9 +132,12 @@ export function summarizeStoredEmailsInRange(
   period: InboxPeriod,
   startAt: number,
   endAt: number,
-  limit = 20,
+  limit = 20
 ): InboxPeriodSummary {
-  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || startAt >= endAt) {
+  if (
+    !(Number.isFinite(startAt) && Number.isFinite(endAt)) ||
+    startAt >= endAt
+  ) {
     throw new Error("A valid email date range is required.");
   }
 
@@ -154,19 +157,19 @@ export function summarizeStoredEmailsInRange(
   `;
 
   return {
+    count: Number(counts[0]?.count ?? 0),
+    emails: rows.map(toStoredEmailSummary),
+    endAt,
     period,
     startAt,
-    endAt,
-    count: Number(counts[0]?.count ?? 0),
     unreadCount: Number(counts[0]?.unread_count ?? 0),
-    emails: rows.map(toStoredEmailSummary),
   };
 }
 
 export function searchStoredEmails(
   host: AgentSqlHost,
   query: string,
-  limit = 10,
+  limit = 10
 ): StoredEmailSummary[] {
   const trimmedQuery = query.trim();
   if (
@@ -174,7 +177,7 @@ export function searchStoredEmails(
     trimmedQuery.length > MAX_SEARCH_QUERY_LENGTH
   ) {
     throw new Error(
-      `Email searches must be between 1 and ${MAX_SEARCH_QUERY_LENGTH} characters.`,
+      `Email searches must be between 1 and ${MAX_SEARCH_QUERY_LENGTH} characters.`
     );
   }
 
@@ -198,7 +201,7 @@ export function findPreviousStoredEmails(
   host: AgentSqlHost,
   sender: string,
   excludeEmailReference = "",
-  limit = 10,
+  limit = 10
 ): StoredEmailSummary[] {
   const normalizedSender = sender.trim().toLowerCase();
   if (!normalizedSender || normalizedSender.length > 320) {
@@ -206,7 +209,8 @@ export function findPreviousStoredEmails(
   }
 
   const excludedId = excludeEmailReference
-    ? findStoredEmailRow(host, excludeEmailReference)?.id ?? excludeEmailReference
+    ? (findStoredEmailRow(host, excludeEmailReference)?.id ??
+      excludeEmailReference)
     : "";
   const rows = host.sql<EmailRow>`
     SELECT *

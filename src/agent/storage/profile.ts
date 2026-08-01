@@ -10,8 +10,8 @@ type ProfileRow = {
 
 function toOwnerProfile(row: ProfileRow | undefined): OwnerProfile {
   return {
-    ownerName: row?.owner_name ?? null,
     agentName: row?.agent_name ?? null,
+    ownerName: row?.owner_name ?? null,
     timeZone: row?.time_zone ?? null,
     updatedAt: row?.updated_at ?? null,
   };
@@ -29,7 +29,7 @@ export function getStoredProfile(host: AgentSqlHost): OwnerProfile {
 
 export function updateStoredProfile(
   host: AgentSqlHost,
-  update: OwnerProfileUpdate,
+  update: OwnerProfileUpdate
 ): OwnerProfile {
   if (
     update.ownerName === undefined &&

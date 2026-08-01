@@ -1,59 +1,53 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "manzo",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-07-29",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"ai": {
-		"binding": "AI"
-	},
-	"vars": {
-		"AI_MODEL": "@cf/moonshotai/kimi-k2.7-code",
-		"AI_GATEWAY_ID": "default",
-		"DEFAULT_OUTBOUND_MAILBOX": "agent@example.com",
-		"MANAGED_MAILBOXES": "agent@example.com",
-		"TELEGRAM_BOT_USERNAME": "your_bot_username"
-	},
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "InboxAgent",
-				"class_name": "InboxAgent"
-			}
-		]
-	},
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": [
-				"InboxAgent"
-			]
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "MAIL_BUCKET",
-			"bucket_name": "manzo-raw-email"
-		}
-	],
-	"send_email": [
-		{
-			"name": "EMAIL",
-			"allowed_sender_addresses": [
-				"agent@example.com"
-			]
-		}
-	],
-	"observability": {
-		"enabled": true,
-		"logs": {
-			"head_sampling_rate": 1
-		},
-		"traces": {
-			"enabled": true,
-			"head_sampling_rate": 0.1
-		}
-	}
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "manzo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "AI_MODEL": "@cf/moonshotai/kimi-k2.7-code",
+    "AI_GATEWAY_ID": "default",
+    "DEFAULT_OUTBOUND_MAILBOX": "agent@example.com",
+    "MANAGED_MAILBOXES": "agent@example.com",
+    "TELEGRAM_BOT_USERNAME": "your_bot_username"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "InboxAgent",
+        "class_name": "InboxAgent"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["InboxAgent"]
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MAIL_BUCKET",
+      "bucket_name": "manzo-raw-email"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["agent@example.com"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  }
 }

@@ -1,23 +1,28 @@
+// biome-ignore-all lint/suspicious/noUnusedExpressions: SQL tagged templates intentionally execute through the Durable Object SQL host.
 import type { AgentSqlHost } from "@/agent/storage/sql";
 
 const MAX_DRAFT_LENGTH = 20_000;
 const MIN_DRAFT_LENGTH = 1;
 const MAX_EMAIL_ADDRESS_LENGTH = 320;
 const MAX_SUBJECT_LENGTH = 998;
+const REPLY_SUBJECT_PATTERN = /^re:/i;
+const HEADER_BREAK_PATTERN = /[\r\n]/;
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class DeliveryOutcomeUnknownError extends Error {
   readonly code = "DELIVERY_OUTCOME_UNKNOWN";
 
-  constructor() {
+  constructor(cause?: unknown) {
     super(
       "Email delivery could not be confirmed. The draft is locked to prevent a duplicate send.",
+      cause === undefined ? undefined : { cause }
     );
     this.name = "DeliveryOutcomeUnknownError";
   }
 }
 
 export function isDeliveryOutcomeUnknown(
-  error: unknown,
+  error: unknown
 ): error is DeliveryOutcomeUnknownError {
   return (
     error instanceof DeliveryOutcomeUnknownError ||
@@ -30,7 +35,7 @@ export function isDeliveryOutcomeUnknown(
 export function markReplyDraftDeliveryUnknown(
   host: AgentSqlHost,
   draftId: string,
-  now = Date.now(),
+  now = Date.now()
 ): void {
   host.sql`
     UPDATE drafts
@@ -42,7 +47,7 @@ export function markReplyDraftDeliveryUnknown(
 export function markNewEmailDeliveryUnknown(
   host: AgentSqlHost,
   draftId: string,
-  now = Date.now(),
+  now = Date.now()
 ): void {
   host.sql`
     UPDATE new_email_drafts
@@ -70,7 +75,7 @@ export type NewEmailDraftRow = {
 };
 
 export function subjectForReply(subject: string): string {
-  return /^re:/i.test(subject) ? subject : `Re: ${subject}`;
+  return REPLY_SUBJECT_PATTERN.test(subject) ? subject : `Re: ${subject}`;
 }
 
 export function normalizeEmailAddress(address: string): string {
@@ -78,8 +83,8 @@ export function normalizeEmailAddress(address: string): string {
   if (
     normalized.length < 3 ||
     normalized.length > MAX_EMAIL_ADDRESS_LENGTH ||
-    /[\r\n]/.test(normalized) ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+    HEADER_BREAK_PATTERN.test(normalized) ||
+    !EMAIL_ADDRESS_PATTERN.test(normalized)
   ) {
     throw new Error("A valid recipient email address is required.");
   }
@@ -92,10 +97,10 @@ export function normalizeSubject(subject: string): string {
   if (
     normalized.length < 1 ||
     normalized.length > MAX_SUBJECT_LENGTH ||
-    /[\r\n]/.test(normalized)
+    HEADER_BREAK_PATTERN.test(normalized)
   ) {
     throw new Error(
-      `Subjects must be between 1 and ${MAX_SUBJECT_LENGTH} characters.`,
+      `Subjects must be between 1 and ${MAX_SUBJECT_LENGTH} characters.`
     );
   }
 
@@ -109,7 +114,7 @@ export function normalizeDraftBody(body: string): string {
     trimmedBody.length > MAX_DRAFT_LENGTH
   ) {
     throw new Error(
-      `Drafts must be between ${MIN_DRAFT_LENGTH} and ${MAX_DRAFT_LENGTH} characters.`,
+      `Drafts must be between ${MIN_DRAFT_LENGTH} and ${MAX_DRAFT_LENGTH} characters.`
     );
   }
 

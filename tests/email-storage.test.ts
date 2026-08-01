@@ -5,21 +5,32 @@ import {
   markReplyDraftDeliveryUnknown,
 } from "../src/agent/storage/drafts.ts";
 import {
+  type EmailRow,
   findOldestStoredEmail,
   summarizeStoredEmailsInRange,
-  type EmailRow,
 } from "../src/agent/storage/emails.ts";
-import { normalizeAttachments } from "../src/email/attachments.ts";
 import { clearStoredMemories } from "../src/agent/storage/memories.ts";
+import { normalizeAttachments } from "../src/email/attachments.ts";
+
+const OLDEST_ORDER_PATTERN = /ORDER BY received_at ASC, id ASC/;
+const LIMIT_ONE_PATTERN = /LIMIT 1/;
+const PARAMETERIZED_LIMIT_PATTERN = /LIMIT \?/;
+const COUNT_PATTERN = /COUNT\(\*\)/;
+const LIMIT_PATTERN = /LIMIT/;
+const DELIVERY_UNKNOWN_PATTERN = /status = 'delivery_unknown'/;
+const SENDING_PATTERN = /status = 'sending'/;
+const DRAFT_STATUS_PATTERN = /status = 'draft'/;
+const DELETE_MEMORIES_PATTERN = /DELETE FROM memories/;
+const RETURNING_KEY_PATTERN = /RETURNING key/;
 
 test("normalizes attachment metadata and binary content for R2 storage", () => {
   const [attachment] = normalizeAttachments("email-1", [
     {
+      content: new TextEncoder().encode("hello"),
+      contentId: undefined,
+      disposition: "attachment",
       filename: "../notes.txt",
       mimeType: "text/plain",
-      disposition: "attachment",
-      contentId: undefined,
-      content: new TextEncoder().encode("hello"),
     },
   ]);
 
@@ -28,31 +39,31 @@ test("normalizes attachment metadata and binary content for R2 storage", () => {
   assert.equal(attachment?.mimeType, "text/plain");
   assert.deepEqual(
     [...(attachment?.content ?? new Uint8Array())],
-    [...new TextEncoder().encode("hello")],
+    [...new TextEncoder().encode("hello")]
   );
 });
 
 test("oldest email queries the complete inbox in ascending order", () => {
   const queries: string[] = [];
   const oldestRow: EmailRow = {
-    id: "email-oldest",
-    short_id: "oldest01",
-    mailbox: "agent@example.com",
-    sender: "first@example.com",
-    sender_name: "First Sender",
-    reply_to: "first@example.com",
-    subject: "The beginning",
-    message_id: "<oldest@example.com>",
-    sent_at: null,
-    text_body: "First message",
+    attachment_count: 0,
     html_body: null,
+    id: "email-oldest",
+    is_auto_reply: 0,
+    mailbox: "agent@example.com",
+    message_id: "<oldest@example.com>",
+    notification_status: "sent",
     raw_key: "mail/email-oldest.eml",
     raw_size: 100,
-    attachment_count: 0,
-    is_auto_reply: 0,
-    received_at: 1,
     read_at: null,
-    notification_status: "sent",
+    received_at: 1,
+    reply_to: "first@example.com",
+    sender: "first@example.com",
+    sender_name: "First Sender",
+    sent_at: null,
+    short_id: "oldest01",
+    subject: "The beginning",
+    text_body: "First message",
   };
   const host = {
     sql<T>(strings: TemplateStringsArray): T[] {
@@ -65,9 +76,9 @@ test("oldest email queries the complete inbox in ascending order", () => {
 
   assert.equal(oldest?.shortId, "oldest01");
   assert.equal(queries.length, 1);
-  assert.match(queries[0] ?? "", /ORDER BY received_at ASC, id ASC/);
-  assert.match(queries[0] ?? "", /LIMIT 1/);
-  assert.doesNotMatch(queries[0] ?? "", /LIMIT \?/);
+  assert.match(queries[0] ?? "", OLDEST_ORDER_PATTERN);
+  assert.match(queries[0] ?? "", LIMIT_ONE_PATTERN);
+  assert.doesNotMatch(queries[0] ?? "", PARAMETERIZED_LIMIT_PATTERN);
 });
 
 test("period summary counts every matching email even when the list is limited", () => {
@@ -88,15 +99,15 @@ test("period summary counts every matching email even when the list is limited",
     "today",
     Date.parse("2026-07-31T23:00:00.000Z"),
     Date.parse("2026-08-01T23:00:00.000Z"),
-    20,
+    20
   );
 
   assert.equal(summary.count, 27);
   assert.equal(summary.unreadCount, 4);
   assert.equal(summary.emails.length, 0);
   assert.equal(calls.length, 2);
-  assert.match(calls[0] ?? "", /COUNT\(\*\)/);
-  assert.match(calls[1] ?? "", /LIMIT/);
+  assert.match(calls[0] ?? "", COUNT_PATTERN);
+  assert.match(calls[1] ?? "", LIMIT_PATTERN);
 });
 
 test("ambiguous delivery outcomes become non-retryable instead of draft", () => {
@@ -113,9 +124,9 @@ test("ambiguous delivery outcomes become non-retryable instead of draft", () => 
 
   assert.equal(queries.length, 2);
   for (const query of queries) {
-    assert.match(query, /status = 'delivery_unknown'/);
-    assert.match(query, /status = 'sending'/);
-    assert.doesNotMatch(query, /status = 'draft'/);
+    assert.match(query, DELIVERY_UNKNOWN_PATTERN);
+    assert.match(query, SENDING_PATTERN);
+    assert.doesNotMatch(query, DRAFT_STATUS_PATTERN);
   }
 });
 
@@ -130,6 +141,6 @@ test("clearing memories deletes only generic memory rows", () => {
 
   assert.equal(clearStoredMemories(host), 2);
   assert.equal(queries.length, 1);
-  assert.match(queries[0] ?? "", /DELETE FROM memories/);
-  assert.match(queries[0] ?? "", /RETURNING key/);
+  assert.match(queries[0] ?? "", DELETE_MEMORIES_PATTERN);
+  assert.match(queries[0] ?? "", RETURNING_KEY_PATTERN);
 });

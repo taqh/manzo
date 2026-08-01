@@ -4,7 +4,11 @@ import { Chat, type Thread } from "chat";
 import { isExplicitSendConfirmation } from "@/agent/confirmation";
 import { isConversationResetRequest } from "@/agent/intent";
 import { isDeliveryOutcomeUnknown } from "@/agent/storage/drafts";
-import type { AgentEnvironment, StoredEmail } from "@/agent/types";
+import type {
+  AgentEnvironment,
+  StoredEmail,
+  UploadedTelegramAttachment,
+} from "@/agent/types";
 import {
   ACTION_DRAFT_EMAIL,
   ACTION_READ_EMAIL,
@@ -15,10 +19,7 @@ import {
   notificationCard,
   toPendingDraft,
 } from "@/channels/telegram/cards";
-import {
-  parseCommand,
-  postCommandResult,
-} from "@/channels/telegram/commands";
+import { parseCommand, postCommandResult } from "@/channels/telegram/commands";
 import {
   operationalStateAfterResponse,
   selectedEmailState,
@@ -38,7 +39,7 @@ type TelegramConfiguration = AgentEnvironment & {
   TELEGRAM_WEBHOOK_SECRET: string;
 };
 
-const MAX_CONVERSATIONAL_DRAFT_AGE_MS = 24 * 60 * 60 * 1_000;
+const MAX_CONVERSATIONAL_DRAFT_AGE_MS = 24 * 60 * 60 * 1000;
 
 type TelegramIncomingAttachment = {
   name?: string;
@@ -49,19 +50,19 @@ type TelegramIncomingAttachment = {
 async function storeTelegramMessageAttachments(
   host: PersonalChatHost,
   conversationId: string,
-  attachments: readonly TelegramIncomingAttachment[],
+  attachments: readonly TelegramIncomingAttachment[]
 ): Promise<string[]> {
-  const uploads = [];
+  const uploads: UploadedTelegramAttachment[] = [];
   for (const attachment of attachments) {
     if (!attachment.fetchData) {
       throw new Error("Telegram did not provide downloadable attachment data.");
     }
     const data = new Uint8Array(await attachment.fetchData());
     uploads.push({
+      data: data.slice().buffer,
       filename: attachment.name ?? "telegram-upload",
       mimeType: attachment.mimeType ?? "application/octet-stream",
       size: data.byteLength,
-      data: data.slice().buffer,
     });
   }
   const stored = await host.storeTelegramAttachments(conversationId, uploads);
@@ -70,7 +71,7 @@ async function storeTelegramMessageAttachments(
 
 async function clearPendingDraftSafely(
   thread: Thread<PersonalThreadState>,
-  draftId: string,
+  draftId: string
 ): Promise<void> {
   try {
     const state = await thread.state;
@@ -80,31 +81,32 @@ async function clearPendingDraftSafely(
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "chat.pending_draft_state_cleanup_failed",
         draftId,
         error: error instanceof Error ? error.message : "Unknown error",
-      }),
+        event: "chat.pending_draft_state_cleanup_failed",
+      })
     );
   }
 }
 
 function telegramConfigured(
-  env: AgentEnvironment,
+  env: AgentEnvironment
 ): env is TelegramConfiguration {
   return Boolean(
     env.TELEGRAM_BOT_TOKEN &&
-    env.TELEGRAM_CHAT_ID &&
-    env.TELEGRAM_BOT_USERNAME &&
-    !env.TELEGRAM_BOT_USERNAME.startsWith("your_") &&
-    env.TELEGRAM_WEBHOOK_SECRET,
+      env.TELEGRAM_CHAT_ID &&
+      env.TELEGRAM_BOT_USERNAME &&
+      !env.TELEGRAM_BOT_USERNAME.startsWith("your_") &&
+      env.TELEGRAM_WEBHOOK_SECRET
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This coordinates Telegram state, AI responses, drafts, and delivery errors.
 async function postAgentResponse(
   thread: Thread<PersonalThreadState>,
   host: PersonalAgentActions,
   text: string,
-  newlyUploadedAttachmentIds: string[] = [],
+  newlyUploadedAttachmentIds: string[] = []
 ): Promise<void> {
   let confirmedSend = false;
   try {
@@ -128,19 +130,16 @@ async function postAgentResponse(
       isExplicitSendConfirmation(text)
     ) {
       const draftAge = Date.now() - state.pendingDraft.displayedAt;
-      if (
-        draftAge < 0 ||
-        draftAge > MAX_CONVERSATIONAL_DRAFT_AGE_MS
-      ) {
+      if (draftAge < 0 || draftAge > MAX_CONVERSATIONAL_DRAFT_AGE_MS) {
         await thread.setState({ pendingDraft: null });
         await thread.post(
-          "That displayed draft is too old for conversational sending. Ask me to prepare a fresh one so you can review it again.",
+          "That displayed draft is too old for conversational sending. Ask me to prepare a fresh one so you can review it again."
         );
         return;
       }
       const sent = await host.sendDraft(
         state.pendingDraft.draftId,
-        state.pendingDraft.revision,
+        state.pendingDraft.revision
       );
       if (!sent.messageId?.trim()) {
         throw new Error("Email service did not return a message ID.");
@@ -153,18 +152,18 @@ async function postAgentResponse(
       } catch (error) {
         console.error(
           JSON.stringify({
-            event: "chat.send_conversation_save_failed",
             draftId: sent.draftId,
             error: error instanceof Error ? error.message : "Unknown error",
-          }),
+            event: "chat.send_conversation_save_failed",
+          })
         );
       }
       console.log(
         JSON.stringify({
-          event: "chat.pending_draft_sent",
-          draftId: sent.draftId,
           confirmation: "natural_language",
-        }),
+          draftId: sent.draftId,
+          event: "chat.pending_draft_sent",
+        })
       );
       await thread.post(confirmationText);
       return;
@@ -185,12 +184,12 @@ async function postAgentResponse(
 
     if (response.attachments.length > 0) {
       await thread.post({
-        markdown: response.text,
         files: response.attachments.map((attachment) => ({
           data: attachment.data,
           filename: attachment.filename,
           mimeType: attachment.mimeType,
         })),
+        markdown: response.text,
       });
     } else {
       await thread.post(response.text);
@@ -201,16 +200,16 @@ async function postAgentResponse(
         ...operationalStateAfterResponse(response),
         pendingAttachmentIds: pendingAttachmentIds.filter(
           (attachmentId) =>
-            !response.consumedAttachmentIds.includes(attachmentId),
+            !response.consumedAttachmentIds.includes(attachmentId)
         ),
       });
     } catch (error) {
       console.error(
         JSON.stringify({
-          event: "chat.operational_state_update_failed",
           confirmedSend,
           error: error instanceof Error ? error.message : "Unknown error",
-        }),
+          event: "chat.operational_state_update_failed",
+        })
       );
     }
 
@@ -221,26 +220,26 @@ async function postAgentResponse(
       } catch (error) {
         console.error(
           JSON.stringify({
-            event: "chat.pending_draft_state_update_failed",
             draftId: draft.draftId,
             error: error instanceof Error ? error.message : "Unknown error",
-          }),
+            event: "chat.pending_draft_state_update_failed",
+          })
         );
       }
     }
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "chat.agent_failed",
         error: error instanceof Error ? error.message : "Unknown error",
-      }),
+        event: "chat.agent_failed",
+      })
     );
     await thread.post(
       confirmedSend
         ? "The email was sent successfully, but I hit a Telegram response/state problem afterward. Duplicate sends are still blocked."
         : isDeliveryOutcomeUnknown(error)
           ? "I couldn’t confirm whether the email was delivered. I locked that draft to prevent a duplicate send; don’t retry it until delivery is checked."
-          : "I hit a problem processing that and did not receive a confirmed send result. Check the draft before retrying.",
+          : "I hit a problem processing that and did not receive a confirmed send result. Check the draft before retrying."
     );
   }
 }
@@ -250,27 +249,27 @@ function neutralThreadState(): PersonalThreadState {
     activeEmailId: null,
     lastInboxPeriod: null,
     lastNotificationEmailId: null,
-    pendingDraft: null,
     pendingAttachmentIds: [],
+    pendingDraft: null,
     presentedEmailIds: [],
   };
 }
 
 async function resetThread(
   thread: Thread<PersonalThreadState>,
-  host: PersonalAgentActions,
+  host: PersonalAgentActions
 ): Promise<void> {
   await host.resetConversation(thread.id);
   await thread.setState(neutralThreadState(), { replace: true });
   console.log(JSON.stringify({ event: "chat.context_reset" }));
   await thread.post(
-    "Fresh start. I cleared this chat’s conversation and working context; your emails, memories, and draft/sent records are untouched.",
+    "Fresh start. I cleared this chat’s conversation and working context; your emails, memories, and draft/sent records are untouched."
   );
 }
 
 export function createPersonalChat(
   env: AgentEnvironment,
-  host: PersonalChatHost,
+  host: PersonalChatHost
 ): PersonalChat | null {
   if (!telegramConfigured(env)) {
     return null;
@@ -287,76 +286,79 @@ export function createPersonalChat(
   const chat = new Chat({
     adapters: { telegram },
     concurrency: "queue",
-    dedupeTtlMs: 10 * 60 * 1_000,
+    dedupeTtlMs: 10 * 60 * 1000,
     logger: "info",
     state: createChatSdkState({ parent: host }),
     userName: env.TELEGRAM_BOT_USERNAME,
   });
 
-  chat.onDirectMessage(async (thread, message) => {
-    if (message.author.userId !== env.TELEGRAM_CHAT_ID) {
-      return;
-    }
+  chat.onDirectMessage(
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This adapter callback handles the complete Telegram message lifecycle.
+    async (thread, message) => {
+      if (message.author.userId !== env.TELEGRAM_CHAT_ID) {
+        return;
+      }
 
-    let newlyUploadedAttachmentIds: string[] = [];
-    if (message.attachments?.length) {
-      try {
-        newlyUploadedAttachmentIds = await storeTelegramMessageAttachments(
+      let newlyUploadedAttachmentIds: string[] = [];
+      if (message.attachments?.length) {
+        try {
+          newlyUploadedAttachmentIds = await storeTelegramMessageAttachments(
+            host,
+            thread.id,
+            message.attachments
+          );
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              error: error instanceof Error ? error.message : "Unknown error",
+              event: "chat.telegram_attachment_store_failed",
+            })
+          );
+          await thread.post(
+            "I couldn’t receive that file from Telegram. Please try uploading it again."
+          );
+          return;
+        }
+      }
+
+      const command = parseCommand(message.text);
+      if (command) {
+        if (command.name === "/reset") {
+          await resetThread(thread, host);
+          return;
+        }
+        await postCommandResult(
+          thread,
           host,
-          thread.id,
-          message.attachments,
-        );
-      } catch (error) {
-        console.error(
-          JSON.stringify({
-            event: "chat.telegram_attachment_store_failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-          }),
-        );
-        await thread.post(
-          "I couldn’t receive that file from Telegram. Please try uploading it again.",
+          command,
+          newlyUploadedAttachmentIds
         );
         return;
       }
-    }
 
-    const command = parseCommand(message.text);
-    if (command) {
-      if (command.name === "/reset") {
-        await resetThread(thread, host);
+      if (!message.text.trim() && newlyUploadedAttachmentIds.length > 0) {
+        const state = (await thread.state) as PersonalThreadState | null;
+        const pendingAttachmentIds = [
+          ...new Set([
+            ...(state?.pendingAttachmentIds ?? []),
+            ...newlyUploadedAttachmentIds,
+          ]),
+        ];
+        await thread.setState({ pendingAttachmentIds });
+        await thread.post(
+          `I received ${newlyUploadedAttachmentIds.length === 1 ? "the file" : "the files"}. Tell me what you’d like me to do with ${newlyUploadedAttachmentIds.length === 1 ? "it" : "them"}.`
+        );
         return;
       }
-      await postCommandResult(
+
+      await postAgentResponse(
         thread,
         host,
-        command,
-        newlyUploadedAttachmentIds,
+        message.text,
+        newlyUploadedAttachmentIds
       );
-      return;
     }
-
-    if (!message.text.trim() && newlyUploadedAttachmentIds.length > 0) {
-      const state = (await thread.state) as PersonalThreadState | null;
-      const pendingAttachmentIds = [
-        ...new Set([
-          ...(state?.pendingAttachmentIds ?? []),
-          ...newlyUploadedAttachmentIds,
-        ]),
-      ];
-      await thread.setState({ pendingAttachmentIds });
-      await thread.post(
-        `I received ${newlyUploadedAttachmentIds.length === 1 ? "the file" : "the files"}. Tell me what you’d like me to do with ${newlyUploadedAttachmentIds.length === 1 ? "it" : "them"}.`,
-      );
-      return;
-    }
-
-    await postAgentResponse(
-      thread,
-      host,
-      message.text,
-      newlyUploadedAttachmentIds,
-    );
-  });
+  );
 
   chat.onSlashCommand(async (event) => {
     if (event.user.userId !== env.TELEGRAM_CHAT_ID) {
@@ -364,8 +366,8 @@ export function createPersonalChat(
     }
 
     const command = {
-      name: event.command.toLowerCase(),
       arguments: event.text.trim(),
+      name: event.command.toLowerCase(),
     };
     if (command.name === "/reset") {
       await resetThread(chat.thread(event.channel.id), host);
@@ -381,6 +383,7 @@ export function createPersonalChat(
       ACTION_SEND_DRAFT,
       ACTION_SHOW_ATTACHMENTS,
     ],
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This callback handles the four Telegram card actions and their failures.
     async (event) => {
       if (event.user.userId !== env.TELEGRAM_CHAT_ID || !event.thread) {
         return;
@@ -397,7 +400,7 @@ export function createPersonalChat(
           await event.thread.post(
             email
               ? formatEmail(email)
-              : `Email ${emailReference} was not found.`,
+              : `Email ${emailReference} was not found.`
           );
           return;
         }
@@ -411,17 +414,19 @@ export function createPersonalChat(
           }
           const attachments = await host.getEmailAttachments(email.shortId);
           if (attachments.length === 0) {
-            await event.thread.post("That email does not have any attachments.");
+            await event.thread.post(
+              "That email does not have any attachments."
+            );
             return;
           }
           await event.thread.setState(selectedEmailState(email.shortId));
           await event.thread.post({
-            markdown: `Here ${attachments.length === 1 ? "is the attachment" : "are the attachments"} from **${email.subject}**:`,
             files: attachments.map((attachment) => ({
               data: attachment.data,
               filename: attachment.filename,
               mimeType: attachment.mimeType,
             })),
+            markdown: `Here ${attachments.length === 1 ? "is the attachment" : "are the attachments"} from **${email.subject}**:`,
           });
           return;
         }
@@ -430,7 +435,7 @@ export function createPersonalChat(
           const emailReference = event.value ?? "";
           await event.thread.setState(selectedEmailState(emailReference));
           await event.thread.post(
-            "Tell me what you want the reply to say. For example: “Tell them I’ll get back to them tomorrow.”",
+            "Tell me what you want the reply to say. For example: “Tell them I’ll get back to them tomorrow.”"
           );
           return;
         }
@@ -455,23 +460,23 @@ export function createPersonalChat(
       } catch (error) {
         console.error(
           JSON.stringify({
-            event: "chat.action_failed",
             action: event.actionId,
             error: error instanceof Error ? error.message : "Unknown error",
-          }),
+            event: "chat.action_failed",
+          })
         );
         await event.thread.post(
           confirmedSend
             ? "The email was sent successfully, but I hit a Telegram response/state problem afterward. Duplicate sends are still blocked."
             : isDeliveryOutcomeUnknown(error)
               ? "I couldn’t confirm whether the email was delivered. I locked that draft to prevent a duplicate send; don’t retry it until delivery is checked."
-            : [
-                "That action failed, or I could not deliver its confirmation.",
-                "The draft is still safe to review. Duplicate sends are blocked.",
-              ].join("\n"),
+              : [
+                  "That action failed, or I could not deliver its confirmation.",
+                  "The draft is still safe to review. Duplicate sends are blocked.",
+                ].join("\n")
         );
       }
-    },
+    }
   );
 
   return chat;
@@ -480,9 +485,9 @@ export function createPersonalChat(
 export async function notifyAboutEmail(
   chat: PersonalChat | null,
   env: AgentEnvironment,
-  email: StoredEmail,
+  email: StoredEmail
 ): Promise<ChatDeliveryStatus> {
-  if (!chat || !telegramConfigured(env)) {
+  if (!(chat && telegramConfigured(env))) {
     return "not_configured";
   }
 
@@ -494,19 +499,17 @@ export async function notifyAboutEmail(
     const state = await thread.state;
     await thread.setState({
       lastNotificationEmailId: email.shortId,
-      ...(state?.pendingDraft
-        ? {}
-        : { presentedEmailIds: [email.shortId] }),
+      ...(state?.pendingDraft ? {} : { presentedEmailIds: [email.shortId] }),
     });
     await thread.post(notificationCard(email));
     return "sent";
   } catch (error) {
     console.error(
       JSON.stringify({
-        event: "chat.notification_failed",
         emailId: email.shortId,
         error: error instanceof Error ? error.message : "Unknown error",
-      }),
+        event: "chat.notification_failed",
+      })
     );
     return "failed";
   }

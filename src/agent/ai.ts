@@ -1,24 +1,24 @@
-import { ToolLoopAgent, isStepCount, type ModelMessage } from "ai";
+import { isStepCount, type ModelMessage, ToolLoopAgent } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import {
   buildRuntimeInstructions,
   deterministicCapabilityResponse,
 } from "@/agent/instructions";
 import {
+  type AgentIntent,
   classifyAgentIntent,
   forcedToolForIntent,
   hasUsableDirectSendContent,
   isExplicitDirectSendRequest,
-  type AgentIntent,
 } from "@/agent/intent";
 import { enforceResponsePostconditions } from "@/agent/postconditions";
+import { learnProfileFromTrustedTelegramMessage } from "@/agent/profile";
+import { DEFAULT_TIME_ZONE, formatLocalTimestamp } from "@/agent/time";
 import {
   createAgentTools,
   createPersonalToolContext,
   type PersonalAiHost,
 } from "@/agent/tools";
-import { learnProfileFromTrustedTelegramMessage } from "@/agent/profile";
-import { DEFAULT_TIME_ZONE, formatLocalTimestamp } from "@/agent/time";
 import type {
   AgentChatResponse,
   AgentEnvironment,
@@ -33,20 +33,18 @@ import type {
 export const DEFAULT_AI_MODEL = "@cf/moonshotai/kimi-k2.7-code";
 
 const DEFAULT_AI_GATEWAY = "default";
-const MAX_USER_MESSAGE_LENGTH = 8_000;
+const MAX_USER_MESSAGE_LENGTH = 8000;
 const MAX_CONVERSATION_MESSAGES = 24;
 const MAX_AGENT_STEPS = 8;
+const MODEL_ID_PATTERN =
+  /^(?:@cf\/[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const GATEWAY_ID_PATTERN = /^[a-z0-9_-]+$/i;
 
 export type { PersonalAiHost } from "@/agent/tools";
 
 function normalizeModelId(value: string | undefined): string {
   const model = value?.trim() || DEFAULT_AI_MODEL;
-  if (
-    model.length > 160 ||
-    !/^(?:@cf\/[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+\/[a-z0-9._-]+)$/i.test(
-      model,
-    )
-  ) {
+  if (model.length > 160 || !MODEL_ID_PATTERN.test(model)) {
     throw new Error("AI_MODEL is not a valid Cloudflare model identifier.");
   }
   return model;
@@ -54,7 +52,7 @@ function normalizeModelId(value: string | undefined): string {
 
 function normalizeGatewayId(value: string | undefined): string {
   const gateway = value?.trim() || DEFAULT_AI_GATEWAY;
-  if (gateway.length > 96 || !/^[a-z0-9_-]+$/i.test(gateway)) {
+  if (gateway.length > 96 || !GATEWAY_ID_PATTERN.test(gateway)) {
     throw new Error("AI_GATEWAY_ID is not a valid gateway identifier.");
   }
   return gateway;
@@ -64,18 +62,18 @@ function conversationForModel(
   messages: ConversationMessage[],
   userMessage: string,
   now: number,
-  timeZone: string,
+  timeZone: string
 ): ModelMessage[] {
   return [
     ...messages.slice(-MAX_CONVERSATION_MESSAGES).map(
       (message): ModelMessage => ({
-        role: message.role,
         content: `[Historical ${formatLocalTimestamp(message.createdAt, timeZone)}]\n${message.content}`,
-      }),
+        role: message.role,
+      })
     ),
     {
-      role: "user",
       content: `[Current trusted Telegram message at ${formatLocalTimestamp(now, timeZone)}]\n${userMessage}`,
+      role: "user",
     },
   ];
 }
@@ -87,7 +85,7 @@ function friendlySender(email: StoredEmailSummary): string {
 function formatBoundaryEmail(
   email: StoredEmailSummary | null | undefined,
   boundary: "latest" | "oldest",
-  timeZone: string,
+  timeZone: string
 ): string {
   if (!email) {
     return "I don’t have any stored emails yet.";
@@ -117,12 +115,15 @@ function formatInboxSummary(summary: InboxPeriodSummary): string {
     summary.unreadCount > 0
       ? ` ${summary.unreadCount} ${summary.unreadCount === 1 ? "is" : "are"} unread.`
       : " They’re all marked read.";
-  const emails = summary.emails.slice(0, 10).map((email, index) =>
-    `${index + 1}. ${friendlySender(email)} — “${email.subject}” at ${new Intl.DateTimeFormat(
-      "en-GB",
-      { timeZone, hour: "2-digit", minute: "2-digit" },
-    ).format(new Date(email.receivedAt))}`,
-  );
+  const emails = summary.emails
+    .slice(0, 10)
+    .map(
+      (email, index) =>
+        `${index + 1}. ${friendlySender(email)} — “${email.subject}” at ${new Intl.DateTimeFormat(
+          "en-GB",
+          { hour: "2-digit", minute: "2-digit", timeZone }
+        ).format(new Date(email.receivedAt))}`
+    );
   const omitted = summary.count - emails.length;
   return [
     `You received ${summary.count} ${summary.count === 1 ? "email" : "emails"} ${label} (${timeZoneLabel}).${unread}`,
@@ -151,17 +152,17 @@ function saveTurnSafely(
   conversationId: string,
   userMessage: string,
   assistantMessage: string,
-  sentDraftId: string | null,
+  sentDraftId: string | null
 ): void {
   try {
     host.saveConversationTurn(conversationId, userMessage, assistantMessage);
   } catch (error) {
     console.error(
       JSON.stringify({
+        error: error instanceof Error ? error.message : "Unknown error",
         event: "agent.conversation_save_failed",
         sentDraftId,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
+      })
     );
   }
 }
@@ -175,36 +176,39 @@ function deterministicResponse(
     activeEmailId?: string | null;
     lastInboxPeriod?: AgentChatResponse["lastInboxPeriod"];
     presentedEmailIds?: string[];
-  } = {},
+  } = {}
 ): AgentChatResponse {
   saveTurnSafely(host, input.conversationId, input.text.trim(), text, null);
   return {
-    text,
-    drafts: [],
     activeEmailId:
-      options.activeEmailId !== undefined
-        ? options.activeEmailId
-        : input.activeEmailId,
-    lastInboxPeriod:
-      options.lastInboxPeriod !== undefined
-        ? options.lastInboxPeriod
-        : input.lastInboxPeriod,
-    presentedEmailIds: options.presentedEmailIds ?? input.presentedEmailIds,
-    sentDraftId: null,
+      options.activeEmailId === undefined
+        ? input.activeEmailId
+        : options.activeEmailId,
     attachments: [],
     consumedAttachmentIds: [],
+    drafts: [],
+    lastInboxPeriod:
+      options.lastInboxPeriod === undefined
+        ? input.lastInboxPeriod
+        : options.lastInboxPeriod,
     model,
+    presentedEmailIds: options.presentedEmailIds ?? input.presentedEmailIds,
+    sentDraftId: null,
+    text,
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This is the central deterministic routing and tool orchestration boundary.
 export async function runPersonalAgent(
   env: AgentEnvironment,
   host: PersonalAiHost,
-  input: AgentMessageInput,
+  input: AgentMessageInput
 ): Promise<AgentChatResponse> {
   const userMessage = input.text.trim();
   if (!userMessage || userMessage.length > MAX_USER_MESSAGE_LENGTH) {
-    throw new Error(`Messages must be between 1 and ${MAX_USER_MESSAGE_LENGTH} characters.`);
+    throw new Error(
+      `Messages must be between 1 and ${MAX_USER_MESSAGE_LENGTH} characters.`
+    );
   }
 
   if (input.authorization === "telegram_allowlisted") {
@@ -215,7 +219,7 @@ export async function runPersonalAgent(
   }
   const profile = host.getProfile();
   const pendingAttachments = host.listUploadedAttachments(
-    input.uploadedAttachmentIds,
+    input.uploadedAttachmentIds
   );
   const timeZone = profile.timeZone ?? DEFAULT_TIME_ZONE;
 
@@ -224,7 +228,7 @@ export async function runPersonalAgent(
     hasActiveEmail: Boolean(
       input.activeEmailId ||
         input.presentedEmailIds[0] ||
-        input.lastNotificationEmailId,
+        input.lastNotificationEmailId
     ),
     hasPendingDraft: Boolean(input.pendingDraft),
     lastInboxPeriod: input.lastInboxPeriod,
@@ -233,25 +237,25 @@ export async function runPersonalAgent(
   console.log(
     JSON.stringify({
       event: "agent.intent_routed",
-      intent: intent.kind,
       hasPendingDraft: Boolean(input.pendingDraft),
       hasSelectedEmail: Boolean(input.activeEmailId),
+      intent: intent.kind,
       presentedEmailCount: input.presentedEmailIds.length,
-    }),
+    })
   );
 
   if (intent.kind === "conversation_reset") {
     host.resetConversation(input.conversationId);
     return {
-      text: "Fresh start. I cleared this chat’s conversation and working context; your emails, memories, and draft/sent records are untouched.",
-      drafts: [],
       activeEmailId: null,
-      lastInboxPeriod: null,
-      presentedEmailIds: [],
-      sentDraftId: null,
       attachments: [],
       consumedAttachmentIds: [],
+      drafts: [],
+      lastInboxPeriod: null,
       model: modelId,
+      presentedEmailIds: [],
+      sentDraftId: null,
+      text: "Fresh start. I cleared this chat’s conversation and working context; your emails, memories, and draft/sent records are untouched.",
     };
   }
 
@@ -265,11 +269,11 @@ export async function runPersonalAgent(
     const text = formatInboxSummary(summary);
     console.log(
       JSON.stringify({
+        count: summary.count,
         event: "agent.inbox_period_checked",
         period: intent.period,
-        count: summary.count,
         unreadCount: summary.unreadCount,
-      }),
+      })
     );
     return deterministicResponse(host, input, modelId, text, {
       lastInboxPeriod: intent.period,
@@ -278,13 +282,13 @@ export async function runPersonalAgent(
   }
 
   if (intent.kind === "latest_email") {
-    const latest = host.listEmails(1)[0];
+    const [latest] = host.listEmails(1);
     console.log(
       JSON.stringify({
+        emailId: latest?.shortId ?? null,
         event: "agent.latest_email_checked",
         found: Boolean(latest),
-        emailId: latest?.shortId ?? null,
-      }),
+      })
     );
     return deterministicResponse(
       host,
@@ -295,7 +299,7 @@ export async function runPersonalAgent(
         activeEmailId: latest?.shortId ?? null,
         lastInboxPeriod: null,
         presentedEmailIds: latest ? [latest.shortId] : [],
-      },
+      }
     );
   }
 
@@ -303,10 +307,10 @@ export async function runPersonalAgent(
     const oldest = host.getOldestEmail();
     console.log(
       JSON.stringify({
+        emailId: oldest?.shortId ?? null,
         event: "agent.oldest_email_checked",
         found: Boolean(oldest),
-        emailId: oldest?.shortId ?? null,
-      }),
+      })
     );
     return deterministicResponse(
       host,
@@ -317,16 +321,19 @@ export async function runPersonalAgent(
         activeEmailId: oldest?.shortId ?? null,
         lastInboxPeriod: null,
         presentedEmailIds: oldest ? [oldest.shortId] : [],
-      },
+      }
     );
   }
 
-  if (isExplicitDirectSendRequest(userMessage) && !hasUsableDirectSendContent(userMessage)) {
+  if (
+    isExplicitDirectSendRequest(userMessage) &&
+    !hasUsableDirectSendContent(userMessage)
+  ) {
     return deterministicResponse(
       host,
       input,
       modelId,
-      "I can send that directly, but I still need usable message content. Tell me exactly what it should say.",
+      "I can send that directly, but I still need usable message content. Tell me exactly what it should say."
     );
   }
   if (isExplicitDirectSendRequest(userMessage) && intent.kind === "other") {
@@ -334,23 +341,28 @@ export async function runPersonalAgent(
       host,
       input,
       modelId,
-      "I can send that directly, but I need a recipient email address or a selected email to reply to.",
+      "I can send that directly, but I need a recipient email address or a selected email to reply to."
     );
   }
 
   const gatewayId = normalizeGatewayId(env.AI_GATEWAY_ID);
   const memories: PersonalMemory[] = host.listMemories();
-  const toolContext = createPersonalToolContext(host, input, userMessage, memories);
+  const toolContext = createPersonalToolContext(
+    host,
+    input,
+    userMessage,
+    memories
+  );
   const tools = createAgentTools(toolContext);
   const forcedTool = forcedToolForIntent(intent) as keyof typeof tools | null;
   const activeTools = (Object.keys(tools) as Array<keyof typeof tools>).filter(
     (toolName) =>
       isExplicitDirectSendRequest(userMessage) ||
-      !["sendNewEmail", "sendReply", "sendPendingDraft"].includes(toolName),
+      !["sendNewEmail", "sendReply", "sendPendingDraft"].includes(toolName)
   );
   const workersai = createWorkersAI({
     binding: env.AI,
-    gateway: { id: gatewayId, collectLog: false },
+    gateway: { collectLog: false, id: gatewayId },
   });
   const model =
     modelId === DEFAULT_AI_MODEL
@@ -359,68 +371,72 @@ export async function runPersonalAgent(
   const now = Date.now();
 
   const agent = new ToolLoopAgent({
-    model,
+    activeTools,
     instructions: buildRuntimeInstructions({
       activeEmailId: input.activeEmailId,
       localTime: formatLocalTimestamp(now, timeZone),
       memories,
-      pendingDraft: input.pendingDraft,
       pendingAttachments,
+      pendingDraft: input.pendingDraft,
       profile,
       toolNames: Object.keys(tools),
     }),
     maxOutputTokens: 900,
-    stopWhen: isStepCount(MAX_AGENT_STEPS),
-    temperature: 0.3,
-    tools,
-    activeTools,
+    model,
     prepareStep: ({ stepNumber }) => {
       if (!forcedTool) {
-        return undefined;
+        return;
       }
       if (stepNumber === 0) {
         return {
           activeTools: [forcedTool],
-          toolChoice: { type: "tool" as const, toolName: forcedTool },
+          toolChoice: { toolName: forcedTool, type: "tool" as const },
         };
       }
       return { activeTools: [], toolChoice: "none" as const };
     },
+    stopWhen: isStepCount(MAX_AGENT_STEPS),
+    temperature: 0.3,
+    tools,
   });
 
   const result = await agent.generate({
     messages: conversationForModel(
-      host.listConversationMessages(input.conversationId, MAX_CONVERSATION_MESSAGES),
+      host.listConversationMessages(
+        input.conversationId,
+        MAX_CONVERSATION_MESSAGES
+      ),
       userMessage,
       now,
-      timeZone,
+      timeZone
     ),
-    timeout: { totalMs: 60_000, stepMs: 25_000 },
+    timeout: { stepMs: 25_000, totalMs: 60_000 },
   });
 
   const sent = toolContext.result.sentDrafts.at(-1) ?? null;
-  let attachments: OutgoingEmailAttachment[] = [];
+  const attachments: OutgoingEmailAttachment[] = [];
   let attachmentDeliveryFailed = false;
   for (const request of toolContext.result.attachmentRequests) {
     try {
       attachments.push(
         ...(await host.getEmailAttachments(
           request.emailId,
-          request.attachmentIds,
-        )),
+          request.attachmentIds
+        ))
       );
     } catch (error) {
       attachmentDeliveryFailed = true;
       console.error(
         JSON.stringify({
-          event: "agent.attachment_load_failed",
           emailId: request.emailId,
           error: error instanceof Error ? error.message : "Unknown error",
-        }),
+          event: "agent.attachment_load_failed",
+        })
       );
     }
   }
-  let text = result.text.trim() || "I finished, but I don’t have a useful response.";
+  let text =
+    result.text.trim() || "I finished, but I don’t have a useful response.";
   if (sent) {
     text = "Sent — that email is on its way.";
   } else if (toolContext.result.deliveryOutcomeUnknown) {
@@ -429,12 +445,14 @@ export async function runPersonalAgent(
   } else if (toolContext.result.drafts.length > 0) {
     text = "Here’s the draft. Nothing has been sent yet.";
   } else if (isExplicitDirectSendRequest(userMessage)) {
-    text = "I couldn’t complete a direct send from that request. Check the recipient and message content, then try again.";
+    text =
+      "I couldn’t complete a direct send from that request. Check the recipient and message content, then try again.";
   }
   if (attachments.length > 0) {
     text = `Here ${attachments.length === 1 ? "is the requested attachment" : "are the requested attachments"}.`;
   } else if (attachmentDeliveryFailed) {
-    text = "I found the requested attachment, but couldn’t retrieve it from private storage.";
+    text =
+      "I found the requested attachment, but couldn’t retrieve it from private storage.";
   }
 
   const postconditions = enforceResponsePostconditions(text, {
@@ -443,43 +461,49 @@ export async function runPersonalAgent(
     factualIntent: factualIntent(intent),
     sentMessageId: sent?.messageId ?? null,
   });
-  text = postconditions.text;
-  saveTurnSafely(host, input.conversationId, userMessage, text, sent?.draftId ?? null);
+  ({ text } = postconditions);
+  saveTurnSafely(
+    host,
+    input.conversationId,
+    userMessage,
+    text,
+    sent?.draftId ?? null
+  );
 
   const toolCalls = result.steps.flatMap((step) =>
-    step.toolCalls.map((call) => call.toolName),
+    step.toolCalls.map((call) => call.toolName)
   );
   console.log(
     JSON.stringify({
-      event: "agent.response_generated",
-      intent: intent.kind,
-      model: modelId,
-      steps: result.steps.length,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      toolCalls,
-      factualToolsRun: toolContext.result.factualToolsRun,
-      draftCount: toolContext.result.drafts.length,
-      sent: Boolean(sent?.messageId),
       attachmentCount: attachments.length,
       attachmentDeliveryFailed,
       deliveryOutcomeUnknown: toolContext.result.deliveryOutcomeUnknown,
+      draftCount: toolContext.result.drafts.length,
+      event: "agent.response_generated",
+      factualToolsRun: toolContext.result.factualToolsRun,
+      inputTokens: result.usage.inputTokens,
+      intent: intent.kind,
+      model: modelId,
+      outputTokens: result.usage.outputTokens,
       postconditionViolations: postconditions.violations,
-    }),
+      sent: Boolean(sent?.messageId),
+      steps: result.steps.length,
+      toolCalls,
+    })
   );
 
   return {
-    text,
-    drafts: sent ? [] : toolContext.result.drafts,
     activeEmailId: toolContext.result.selectedEmailId,
+    attachments,
+    consumedAttachmentIds: toolContext.result.consumedAttachmentIds,
+    drafts: sent ? [] : toolContext.result.drafts,
     lastInboxPeriod: input.lastInboxPeriod,
+    model: modelId,
     presentedEmailIds:
       toolContext.result.presentedEmailIds.length > 0
         ? toolContext.result.presentedEmailIds
         : input.presentedEmailIds,
     sentDraftId: sent?.draftId ?? null,
-    attachments,
-    consumedAttachmentIds: toolContext.result.consumedAttachmentIds,
-    model: modelId,
+    text,
   };
 }

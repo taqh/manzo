@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noUnusedExpressions: SQL tagged templates intentionally execute through the Durable Object SQL host.
 import type { AgentSqlHost } from "@/agent/storage/sql";
 
 export function initializeAgentSchema(host: AgentSqlHost): void {

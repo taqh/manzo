@@ -2,18 +2,21 @@ import { DEFAULT_TIME_ZONE } from "./time.ts";
 import type { OwnerProfileUpdate } from "./types.ts";
 
 const MAX_NAME_LENGTH = 80;
+const QUOTED_EMAIL_PATTERN = /^(?:>|from:|to:|subject:|date:|on .+wrote:)/im;
+const NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M}' -]*$/u;
+const TIME_ZONE_PATTERN =
+  /\b(?:my\s+)?time\s*zone\s*(?:is|:|=)\s*([A-Za-z_+-]+\/[A-Za-z_+\-/]+)/i;
+const OWNER_NAME_PATTERN = /\b(?:my name is|call me)\s+([^\n,.!?]{1,80})/i;
+const AGENT_NAME_PATTERN =
+  /\b(?:your name is|call yourself)\s+([^\n,.!?]{1,80})/i;
 
 function containsQuotedEmail(message: string): boolean {
-  return /^(?:>|from:|to:|subject:|date:|on .+wrote:)/im.test(message);
+  return QUOTED_EMAIL_PATTERN.test(message);
 }
 
 function cleanName(value: string | undefined): string | null {
   const name = value?.trim().replace(/\s+/g, " ") ?? "";
-  if (
-    !name ||
-    name.length > MAX_NAME_LENGTH ||
-    !/^[\p{L}\p{M}][\p{L}\p{M}' -]*$/u.test(name)
-  ) {
+  if (!name || name.length > MAX_NAME_LENGTH || !NAME_PATTERN.test(name)) {
     return null;
   }
   return name;
@@ -29,9 +32,7 @@ export function isValidTimeZone(value: string): boolean {
 }
 
 function explicitTimeZone(message: string): string | null {
-  const candidate = message.match(
-    /\b(?:my\s+)?time\s*zone\s*(?:is|:|=)\s*([A-Za-z_+-]+\/[A-Za-z_+\-/]+)/i,
-  )?.[1];
+  const candidate = message.match(TIME_ZONE_PATTERN)?.[1];
   if (!candidate) {
     return null;
   }
@@ -43,19 +44,15 @@ function explicitTimeZone(message: string): string | null {
  * Email payloads and tool results never call this function.
  */
 export function learnProfileFromTrustedTelegramMessage(
-  message: string,
+  message: string
 ): OwnerProfileUpdate {
   if (containsQuotedEmail(message)) {
     return {};
   }
 
   const update: OwnerProfileUpdate = {};
-  const ownerName = cleanName(
-    message.match(/\b(?:my name is|call me)\s+([^\n,.!?]{1,80})/i)?.[1],
-  );
-  const agentName = cleanName(
-    message.match(/\b(?:your name is|call yourself)\s+([^\n,.!?]{1,80})/i)?.[1],
-  );
+  const ownerName = cleanName(message.match(OWNER_NAME_PATTERN)?.[1]);
+  const agentName = cleanName(message.match(AGENT_NAME_PATTERN)?.[1]);
   const timeZone = explicitTimeZone(message);
 
   if (ownerName) {

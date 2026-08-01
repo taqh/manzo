@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite/biome/core"],
+  "linter": {
+    "rules": {
+      "complexity": {
+        "noVoid": "off"
+      },
+      "performance": {
+        "noAwaitInLoops": "off",
+        "noBarrelFile": "off"
+      },
+      "style": {
+        "noNestedTernary": "off",
+        "useConsistentMethodSignatures": "off",
+        "useConsistentTypeDefinitions": "off"
+      },
+      "suspicious": {
+        "noControlCharactersInRegex": "off",
+        "noUnnecessaryConditions": "off",
+        "useAwait": "off"
+      }
+    }
+  }
+}

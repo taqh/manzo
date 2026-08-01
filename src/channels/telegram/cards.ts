@@ -1,4 +1,4 @@
-import { Actions, Button, Card, CardText, type CardElement } from "chat";
+import { Actions, Button, Card, type CardElement, CardText } from "chat";
 import type {
   DraftResult,
   PendingDraft,
@@ -7,7 +7,9 @@ import type {
 } from "@/agent/types";
 import { emailPreview, extractLatestEmailContent } from "@/email/normalize";
 
-const CHAT_MESSAGE_LIMIT = 3_500;
+const CHAT_MESSAGE_LIMIT = 3500;
+const REPLY_SUBJECT_PATTERN = /^(?:(?:re|fw|fwd):\s*)+/i;
+const SENDER_LOCAL_PART_PATTERN = /[._-]+/g;
 
 // Keep these IDs short: Telegram limits encoded callback payloads to 64 bytes.
 export const ACTION_READ_EMAIL = "r";
@@ -24,17 +26,17 @@ function clipForChat(value: string, limit = CHAT_MESSAGE_LIMIT): string {
 }
 
 function friendlySender(
-  email: Pick<StoredEmailSummary, "sender" | "senderName">,
+  email: Pick<StoredEmailSummary, "sender" | "senderName">
 ): string {
   return (
     email.senderName?.trim() ||
-    email.sender.split("@")[0]?.replace(/[._-]+/g, " ") ||
+    email.sender.split("@")[0]?.replace(SENDER_LOCAL_PART_PATTERN, " ") ||
     email.sender
   );
 }
 
 function cleanSubject(subject: string): string {
-  return subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, "").trim() || "no subject";
+  return subject.replace(REPLY_SUBJECT_PATTERN, "").trim() || "no subject";
 }
 
 function quoteForChat(value: string): string {
@@ -50,9 +52,9 @@ export function formatEmail(email: StoredEmail): string {
     : email.sender;
   const latestContent = extractLatestEmailContent(email.textBody);
   const quotedHistoryHidden =
-    latestContent.trim() !== email.textBody.trim()
-      ? "\n\n_Quoted reply history hidden._"
-      : "";
+    latestContent.trim() === email.textBody.trim()
+      ? ""
+      : "\n\n_Quoted reply history hidden._";
   const attachments =
     email.attachmentCount > 0
       ? `\n\nAttachments: ${email.attachmentCount} (available to share)`
@@ -70,7 +72,7 @@ export function formatEmail(email: StoredEmail): string {
       `Received at ${email.mailbox} · ID ${email.shortId}`,
     ]
       .filter((line) => line !== "")
-      .join("\n"),
+      .join("\n")
   );
 }
 
@@ -94,17 +96,11 @@ export function draftCard(draft: DraftResult): CardElement {
       ? [
           "",
           `Attachments (${draft.attachments.length}):`,
-          ...draft.attachments.map(
-            (attachment) => `• ${attachment.filename}`,
-          ),
+          ...draft.attachments.map((attachment) => `• ${attachment.filename}`),
         ].join("\n")
       : "";
 
   return Card({
-    title:
-      draft.kind === "new"
-        ? `New email draft to ${draft.recipient}`
-        : `Draft reply to ${draft.recipient}`,
     children: [
       CardText(
         [
@@ -116,7 +112,7 @@ export function draftCard(draft: DraftResult): CardElement {
           attachmentText,
           "",
           "Nothing has been sent. Check it carefully first.",
-        ].join("\n"),
+        ].join("\n")
       ),
       Actions([
         Button({
@@ -130,27 +126,31 @@ export function draftCard(draft: DraftResult): CardElement {
         }),
       ]),
     ],
+    title:
+      draft.kind === "new"
+        ? `New email draft to ${draft.recipient}`
+        : `Draft reply to ${draft.recipient}`,
   });
 }
 
 export function toPendingDraft(draft: DraftResult): PendingDraft {
   return {
-    draftId: draft.draftId,
-    revision: draft.revision,
-    kind: draft.kind,
-    from: draft.from,
-    recipient: draft.recipient,
-    subject: draft.subject,
     displayedAt: Date.now(),
+    draftId: draft.draftId,
+    from: draft.from,
+    kind: draft.kind,
+    recipient: draft.recipient,
+    revision: draft.revision,
+    subject: draft.subject,
   };
 }
 
 export function notificationCard(email: StoredEmail): CardElement {
   const sender = friendlySender(email);
-  const isReply = /^(?:re):/i.test(email.subject);
+  const isReply = REPLY_SUBJECT_PATTERN.test(email.subject);
   const title = clipForChat(
     `${sender} ${isReply ? "replied about" : "emailed you about"} “${cleanSubject(email.subject)}”`,
-    100,
+    100
   );
   const attachmentText =
     email.attachmentCount > 0
@@ -174,12 +174,11 @@ export function notificationCard(email: StoredEmail): CardElement {
         id: ACTION_SHOW_ATTACHMENTS,
         label: "Show attachments",
         value: email.shortId,
-      }),
+      })
     );
   }
 
   return Card({
-    title,
     children: [
       CardText(
         [
@@ -189,9 +188,10 @@ export function notificationCard(email: StoredEmail): CardElement {
           attachmentText,
         ]
           .filter((line) => line !== "")
-          .join("\n"),
+          .join("\n")
       ),
       Actions(actions),
     ],
+    title,
   });
 }

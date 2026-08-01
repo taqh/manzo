@@ -9,14 +9,17 @@ export type NormalizedAttachment = {
   content: Uint8Array;
 };
 
+const UNSAFE_FILENAME_CHARACTERS_PATTERN = /[\\/\x00-\x1f]+/g;
+const LEADING_DOTS_PATTERN = /^\.+/;
+
 export function sanitizeAttachmentFilename(
   filename: string | null | undefined,
-  fallback = "attachment",
+  fallback = "attachment"
 ): string {
   const normalized = filename
     ?.trim()
-    .replace(/[\\/\x00-\x1f]+/g, "_")
-    .replace(/^\.+/, "");
+    .replace(UNSAFE_FILENAME_CHARACTERS_PATTERN, "_")
+    .replace(LEADING_DOTS_PATTERN, "");
   return normalized?.slice(0, 240) || fallback;
 }
 
@@ -52,15 +55,15 @@ function attachmentBytes(attachment: ParsedAttachment): Uint8Array {
 
 export function normalizeAttachments(
   emailId: string,
-  attachments: ParsedAttachment[],
+  attachments: ParsedAttachment[]
 ): NormalizedAttachment[] {
   return attachments.map((attachment, index) => ({
-    id: `${emailId}-attachment-${index + 1}`,
-    filename: safeFilename(attachment.filename, index),
-    mimeType: attachment.mimeType || "application/octet-stream",
-    disposition: attachment.disposition ?? null,
-    contentId: attachment.contentId ?? null,
     content: attachmentBytes(attachment),
+    contentId: attachment.contentId ?? null,
+    disposition: attachment.disposition ?? null,
+    filename: safeFilename(attachment.filename, index),
+    id: `${emailId}-attachment-${index + 1}`,
+    mimeType: attachment.mimeType || "application/octet-stream",
   }));
 }
 

@@ -1,6 +1,7 @@
+// biome-ignore-all lint/suspicious/noUnusedExpressions: SQL tagged templates intentionally execute through the Durable Object SQL host.
+import { scopedConversationId } from "@/agent/conversation";
 import type { AgentSqlHost } from "@/agent/storage/sql";
 import type { ConversationMessage } from "@/agent/types";
-import { scopedConversationId } from "@/agent/conversation";
 
 const MAX_CONVERSATION_HISTORY = 40;
 
@@ -14,12 +15,12 @@ type ConversationRow = {
 export function listStoredConversationMessages(
   host: AgentSqlHost,
   conversationId: string,
-  limit = 24,
+  limit = 24
 ): ConversationMessage[] {
   const storageConversationId = scopedConversationId(conversationId);
   const safeLimit = Math.max(
     1,
-    Math.min(MAX_CONVERSATION_HISTORY, Math.trunc(limit)),
+    Math.min(MAX_CONVERSATION_HISTORY, Math.trunc(limit))
   );
   const rows = host.sql<ConversationRow>`
     SELECT id, role, content, created_at
@@ -34,9 +35,9 @@ export function listStoredConversationMessages(
   `;
 
   return rows.map((row) => ({
-    role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    role: row.role,
   }));
 }
 
@@ -44,7 +45,7 @@ export function saveStoredConversationTurn(
   host: AgentSqlHost,
   conversationId: string,
   userMessage: string,
-  assistantMessage: string,
+  assistantMessage: string
 ): void {
   const storageConversationId = scopedConversationId(conversationId);
   const now = Date.now();
@@ -76,7 +77,7 @@ export function saveStoredConversationTurn(
 
 export function clearStoredConversation(
   host: AgentSqlHost,
-  conversationId: string,
+  conversationId: string
 ): void {
   host.sql`
     DELETE FROM conversation_messages

@@ -2,6 +2,20 @@ import { DEFAULT_TIME_ZONE } from "./time.ts";
 import type { OwnerProfile, StoredOutboundAttachment } from "./types.ts";
 
 export const AGENT_RUNTIME_VERSION = "inbox-reliability-v4";
+const INCOMING_MAIL_NOTIFICATION_PATTERN =
+  /\b(?:let me know|lmk|notify me|tell me)\b[\s\S]{0,80}\b(?:mail|email|anything)\b[\s\S]{0,80}\b(?:arrives|comes in|comes up|new)\b/;
+const SHORT_INCOMING_MAIL_NOTIFICATION_PATTERN =
+  /\blmk\b[\s\S]{0,40}\b(?:any|anything|something)\b[\s\S]{0,40}\b(?:arrives|comes in|comes up)\b/;
+const CAPABILITY_QUESTION_PATTERN =
+  /\b(?:can you|are you able|do you|what can you|capabilit)\b/;
+const EMAIL_ATTACHMENT_REQUEST_PATTERN =
+  /\b(?:show|send|share|forward|give|download)\b[\s\S]{0,100}\b(?:attachment|attachments|file|files|document|documents|pdf|image|images|photo|photos)\b/;
+const WEB_CAPABILITY_PATTERN = /\b(?:browse|web|internet|search online)\b/;
+const ATTACHMENT_CAPABILITY_PATTERN =
+  /\b(?:attachments?|images?|files?|documents?|resume)\b/;
+const NOTIFICATION_CAPABILITY_PATTERN =
+  /\b(?:watch|monitor|notify|new mail|new email)\b/;
+const EMAIL_CAPABILITY_PATTERN = /\b(?:send|email|reply)\b/;
 
 export type RuntimeCapabilityManifest = {
   proactiveEmailNotifications: boolean;
@@ -14,19 +28,19 @@ export type RuntimeCapabilityManifest = {
 };
 
 export function runtimeCapabilities(
-  toolNames: readonly string[],
+  toolNames: readonly string[]
 ): RuntimeCapabilityManifest {
   const has = (name: string): boolean => toolNames.includes(name);
   return {
+    browseWeb: false,
+    composeEmail: has("createDraft") && has("createNewEmailDraft"),
+    inspectAttachments:
+      has("listEmailAttachments") && has("sendAttachmentsToTelegram"),
     proactiveEmailNotifications: true,
     readEmail: has("readEmail") && has("getInboxSummary"),
     searchEmail: has("searchEmails") && has("findPreviousEmailsFrom"),
-    composeEmail: has("createDraft") && has("createNewEmailDraft"),
     sendEmail:
       has("sendPendingDraft") && has("sendNewEmail") && has("sendReply"),
-    browseWeb: false,
-    inspectAttachments:
-      has("listEmailAttachments") && has("sendAttachmentsToTelegram"),
   };
 }
 
@@ -91,40 +105,33 @@ export function helpMessage(): string {
   ].join("\n");
 }
 
-export function deterministicCapabilityResponse(message: string): string | null {
+export function deterministicCapabilityResponse(
+  message: string
+): string | null {
   const normalized = message.toLowerCase();
   if (
-    /\b(?:let me know|lmk|notify me|tell me)\b[\s\S]{0,80}\b(?:mail|email|anything)\b[\s\S]{0,80}\b(?:arrives|comes in|comes up|new)\b/.test(
-      normalized,
-    ) ||
-    /\blmk\b[\s\S]{0,40}\b(?:any|anything|something)\b[\s\S]{0,40}\b(?:arrives|comes in|comes up)\b/.test(
-      normalized,
-    )
+    INCOMING_MAIL_NOTIFICATION_PATTERN.test(normalized) ||
+    SHORT_INCOMING_MAIL_NOTIFICATION_PATTERN.test(normalized)
   ) {
     return "Absolutely. Incoming email already triggers a Telegram notification, so I’ll let you know here when something arrives.";
   }
-  const asksCapability =
-    /\b(?:can you|are you able|do you|what can you|capabilit)\b/.test(normalized);
+  const asksCapability = CAPABILITY_QUESTION_PATTERN.test(normalized);
   if (!asksCapability) {
     return null;
   }
-  if (
-    /\b(?:show|send|share|forward|give|download)\b[\s\S]{0,100}\b(?:attachment|attachments|file|files|document|documents|pdf|image|images|photo|photos)\b/.test(
-      normalized,
-    )
-  ) {
+  if (EMAIL_ATTACHMENT_REQUEST_PATTERN.test(normalized)) {
     return null;
   }
-  if (/\b(?:browse|web|internet|search online)\b/.test(normalized)) {
+  if (WEB_CAPABILITY_PATTERN.test(normalized)) {
     return "I can’t browse the web yet. I can work with your stored email and personal memories.";
   }
-  if (/\b(?:attachments?|images?|files?|documents?|resume)\b/.test(normalized)) {
+  if (ATTACHMENT_CAPABILITY_PATTERN.test(normalized)) {
     return "Yes. I preserve original email attachments privately, can list them, and can share them here in Telegram when you ask. Files you upload here can also be attached to an outgoing email draft.";
   }
-  if (/\b(?:watch|monitor|notify|new mail|new email)\b/.test(normalized)) {
+  if (NOTIFICATION_CAPABILITY_PATTERN.test(normalized)) {
     return "Yes. Incoming email automatically triggers a Telegram notification, so you don’t need to ask me to poll the inbox.";
   }
-  if (/\b(?:send|email|reply)\b/.test(normalized)) {
+  if (EMAIL_CAPABILITY_PATTERN.test(normalized)) {
     return "Yes. I can compose and send replies or brand-new email. Ask for a draft to preview it, or explicitly say “just send” with a recipient and usable message for a one-turn send.";
   }
   return null;
@@ -172,7 +179,7 @@ Current grounding:
 - Timezone: ${timeZone}${context.profile.timeZone ? "" : " (default because no timezone has been explicitly saved)"}.
 - Current local date and time: ${context.localTime}.
 - Selected email ID: ${context.activeEmailId ?? "none"}.
-- Pending Telegram uploads: ${context.pendingAttachments.length > 0 ? JSON.stringify(context.pendingAttachments.map(({ id, filename, mimeType, size }) => ({ id, filename, mimeType, size }))) : "none"}.
+- Pending Telegram uploads: ${context.pendingAttachments.length > 0 ? JSON.stringify(context.pendingAttachments.map(({ id, filename, mimeType, size }) => ({ filename, id, mimeType, size }))) : "none"}.
 
 Capabilities:
 - Proactive Telegram notifications for new email: ${capabilities.proactiveEmailNotifications}.
