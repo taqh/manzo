@@ -83,6 +83,10 @@ import {
   sanitizeAttachmentFilename,
 } from "@/email/attachments";
 import { normalizeEmail } from "@/email/normalize";
+import {
+  buildOutboundEmailMessage,
+  formatEmailAddress,
+} from "@/email/outbound";
 
 type InboxAgentState = {
   emailCount: number;
@@ -507,7 +511,7 @@ export class InboxAgent extends Agent<AgentEnvironment, InboxAgentState> {
       body: trimmedBody,
       draftId,
       emailShortId: email.shortId,
-      from: email.mailbox,
+      from: formatEmailAddress(email.mailbox, this.getProfile().ownerName),
       kind: "reply",
       recipient: email.replyTo,
       revision,
@@ -565,7 +569,10 @@ export class InboxAgent extends Agent<AgentEnvironment, InboxAgentState> {
       attachments,
       body: trimmedBody,
       draftId,
-      from: defaultOutboundMailbox,
+      from: formatEmailAddress(
+        defaultOutboundMailbox,
+        this.getProfile().ownerName
+      ),
       kind: "new",
       recipient: normalizedRecipient,
       revision,
@@ -683,20 +690,20 @@ export class InboxAgent extends Agent<AgentEnvironment, InboxAgentState> {
     try {
       const { ownerName } = this.getProfile();
       const attachments = await this.loadDraftEmailAttachments(draft.id);
-      const result = await this.sendEmail({
-        binding: this.env.EMAIL,
-        from: {
-          email: email.mailbox,
-          ...(ownerName ? { name: ownerName } : {}),
-        },
-        replyTo: email.mailbox,
-        subject: subjectForReply(email.subject),
-        text: draft.body,
-        to: email.replyTo,
-        ...(attachments.length > 0 ? { attachments } : {}),
-        inReplyTo: email.messageId ?? undefined,
-        secret: this.env.EMAIL_SECRET,
-      });
+      const result = await this.env.EMAIL.send(
+        buildOutboundEmailMessage({
+          attachments,
+          from: {
+            email: email.mailbox,
+            ...(ownerName ? { name: ownerName } : {}),
+          },
+          inReplyTo: email.messageId,
+          replyTo: email.mailbox,
+          subject: subjectForReply(email.subject),
+          text: draft.body,
+          to: email.replyTo,
+        })
+      );
 
       if (!result.messageId?.trim()) {
         throw new Error("Email service did not return a message ID.");
@@ -754,19 +761,19 @@ export class InboxAgent extends Agent<AgentEnvironment, InboxAgentState> {
     try {
       const { ownerName } = this.getProfile();
       const attachments = await this.loadDraftEmailAttachments(draft.id);
-      const result = await this.sendEmail({
-        binding: this.env.EMAIL,
-        from: {
-          email: defaultOutboundMailbox,
-          ...(ownerName ? { name: ownerName } : {}),
-        },
-        replyTo: defaultOutboundMailbox,
-        subject: draft.subject,
-        text: draft.body,
-        to: draft.recipient,
-        ...(attachments.length > 0 ? { attachments } : {}),
-        secret: this.env.EMAIL_SECRET,
-      });
+      const result = await this.env.EMAIL.send(
+        buildOutboundEmailMessage({
+          attachments,
+          from: {
+            email: defaultOutboundMailbox,
+            ...(ownerName ? { name: ownerName } : {}),
+          },
+          replyTo: defaultOutboundMailbox,
+          subject: draft.subject,
+          text: draft.body,
+          to: draft.recipient,
+        })
+      );
 
       if (!result.messageId?.trim()) {
         throw new Error("Email service did not return a message ID.");

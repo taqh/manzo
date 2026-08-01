@@ -30,66 +30,11 @@ Before deploying, replace the example mailbox and bot values in
 inbound mail while `agent@example.com` or `your-domain.example` placeholders
 remain.
 
-## Configure `wrangler.jsonc`
-
-Non-secret deployment configuration belongs in `wrangler.jsonc`:
-
-| Setting | Purpose |
-| --- | --- |
-| `name` | Cloudflare Worker name, initially `manzo` |
-| `r2_buckets[0].bucket_name` | Private raw-mail bucket; choose a suitable unique name |
-| `DEFAULT_OUTBOUND_MAILBOX` | Address used for brand-new messages; must be managed |
-| `MANAGED_MAILBOXES` | Comma-separated inbound/reply addresses; must include the default mailbox |
-| `send_email.allowed_sender_addresses` | Must match the addresses Email Sending permits |
-| `AI_MODEL` | Workers AI or AI Gateway model identifier |
-| `AI_GATEWAY_ID` | Cloudflare AI Gateway identifier; the template defaults to `default` |
-| `TELEGRAM_BOT_USERNAME` | Public BotFather username without `@` |
-
-For a first deployment, set all mailbox-related values to one real test
-address, for example `agent@your-domain.example`. Keep the routing list and
-allowed sender list in sync with `MANAGED_MAILBOXES`.
-
-Learned identity is intentionally not configuration: `ownerName`, `agentName`,
-and `timeZone` are optional SQLite profile fields. With no timezone,
-date-relative queries use UTC; set an IANA value in Telegram when you want
-local calendar boundaries.
-
-## Private R2 setup
-
-Create a bucket and place its name in `wrangler.jsonc`:
-
-```sh
-pnpm exec wrangler r2 bucket create manzo-raw-email
-```
-
-Do not create a public bucket binding, custom-domain mapping, or CDN endpoint
-for this bucket. Manzo stores original RFC822 files at `emails/<sha256>.eml`.
-Those files can include sensitive content and attachments.
-
-## Email Routing setup
-
-In Cloudflare, open **Email > Email Routing** for `your-domain.example` and
-complete the domain onboarding. After the Worker has been deployed:
-
-1. Create a rule for only `agent@your-domain.example`.
-2. Choose **Send to a Worker** and select the Manzo Worker.
-3. Send a harmless message from another mailbox.
-4. Confirm its Telegram notification, read it, prepare a reply, and confirm
-   delivery.
-5. Add any other managed mailbox only after this end-to-end test passes.
-
-Routing one test address first avoids interrupting every mailbox if an account
-or DNS setting is incomplete.
-
-## Email Sending onboarding
-
-Open **Compute > Email Service > Email Sending** in Cloudflare and onboard
-`your-domain.example`. Add the DNS records Cloudflare requests, then ensure the
-addresses in `send_email.allowed_sender_addresses` match the real managed
-addresses in `wrangler.jsonc`. Incoming routing and outbound Email Sending do
-not automatically configure each other.
-
 ## Telegram setup
+
+Telegram is the best first integration to configure because it does not depend
+on a deployed Worker. You can create the bot, get the token, and discover the
+allowlisted chat ID before provisioning Cloudflare resources.
 
 ### Create the bot
 
@@ -115,7 +60,60 @@ curl "https://api.telegram.org/bot<TOKEN>/getUpdates"
 Treat the chat ID as a secret allowlist value. Do not use a claimed name as an
 authorization check.
 
-### Add Wrangler secrets
+## Configure `wrangler.jsonc`
+
+Non-secret deployment configuration belongs in `wrangler.jsonc`:
+
+| Setting | Purpose |
+| --- | --- |
+| `name` | Cloudflare Worker name, initially `manzo` |
+| `r2_buckets[0].bucket_name` | Private raw-mail bucket; choose a suitable unique name |
+| `DEFAULT_OUTBOUND_MAILBOX` | Address used for brand-new messages; must be managed |
+| `MANAGED_MAILBOXES` | Comma-separated inbound/reply addresses; must include the default mailbox |
+| `send_email.allowed_sender_addresses` | Must match the addresses Email Sending permits |
+| `AI_MODEL` | Workers AI or AI Gateway model identifier |
+| `AI_GATEWAY_ID` | Cloudflare AI Gateway identifier; the template defaults to `default` |
+| `TELEGRAM_BOT_USERNAME` | Public BotFather username without `@` |
+
+For a first deployment, set all mailbox-related values to one real test
+address, for example `agent@your-domain.example`. Keep the routing list and
+allowed sender list in sync with `MANAGED_MAILBOXES`.
+
+Learned identity is intentionally not configuration: `ownerName`, `agentName`,
+and `timeZone` are optional SQLite profile fields. With no timezone,
+date-relative queries use UTC; set an IANA value in Telegram when you want
+local calendar boundaries.
+
+## Email Sending onboarding
+
+Open **Compute > Email Service > Email Sending** in Cloudflare and onboard
+`your-domain.example`. Add the DNS records Cloudflare requests, then ensure the
+addresses in `send_email.allowed_sender_addresses` match the real managed
+addresses in `wrangler.jsonc`. Incoming routing and outbound Email Sending do
+not automatically configure each other.
+
+## First deploy
+
+Deploy once before adding Wrangler secrets. The first deployment creates the
+Worker and provisions the configured resources and bindings. This includes the
+private R2 bucket from `r2_buckets`, the Durable Object SQLite migration, and
+the Workers AI binding; no separate R2, Durable Object, or Workers AI setup
+step is required:
+
+```sh
+pnpm check
+pnpm deploy
+```
+
+Do not create a public R2 bucket, custom-domain mapping, or CDN endpoint. Manzo
+stores original RFC822 files and attachments privately in the provisioned
+bucket.
+
+The Telegram secrets are intentionally not required for this first deployment;
+the Worker can be created while Telegram is still disconnected. The root URL
+may report that Telegram is not configured until the secrets are added.
+
+## Add Telegram secrets
 
 `.env.example` contains only empty secret placeholders. For a deployment, set
 the production values with Wrangler rather than committing a `.env` or
@@ -134,14 +132,11 @@ secret:
 pnpm exec wrangler secret put EMAIL_SECRET
 ```
 
-## Deploy and register the webhook
+`wrangler secret put` requires the Worker to exist and deploys the updated
+secret immediately. After the three required commands complete, the deployed
+Worker has its Telegram configuration.
 
-Validate before deployment:
-
-```sh
-pnpm check
-pnpm deploy
-```
+## Register the Telegram webhook
 
 Then replace the placeholders and register the Telegram webhook. The URL must
 use your deployed Worker hostname, not an example URL:
@@ -156,6 +151,21 @@ curl --request POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
     "drop_pending_updates": true
   }'
 ```
+
+## Email Routing setup
+
+In Cloudflare, open **Email > Email Routing** for `your-domain.example` and
+complete the domain onboarding. After the Worker has been deployed:
+
+1. Create a rule for only `agent@your-domain.example`.
+2. Choose **Send to a Worker** and select the Manzo Worker.
+3. Send a harmless message from another mailbox.
+4. Confirm its Telegram notification, read it, prepare a reply, and confirm
+   delivery.
+5. Add any other managed mailbox only after this end-to-end test passes.
+
+Routing one test address first avoids interrupting every mailbox if an account
+or DNS setting is incomplete.
 
 Opening the Worker root should show `"status":"ok"`. Until mailbox
 placeholders are replaced it instead returns a precise configuration error.

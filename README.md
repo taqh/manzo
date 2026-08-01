@@ -68,10 +68,11 @@ pnpm install
 pnpm check
 ```
 
-Then configure `wrangler.jsonc`, create the R2 bucket, onboard Email Routing
-and Email Sending, configure the Telegram bot and Wrangler secrets, deploy,
-and register the webhook. Follow [`SETUP.md`](SETUP.md) for the exact order and
-verification steps.
+Then configure the Telegram bot and chat ID, configure `wrangler.jsonc`, onboard
+Email Sending, deploy once (which provisions the R2 bucket, Durable Object,
+and Workers AI binding), add the Wrangler secrets, register the webhook, and
+finally point Email Routing at the Worker. Follow
+[`SETUP.md`](SETUP.md) for the exact order and verification steps.
 
 ## Using Manzo
 
@@ -147,9 +148,11 @@ src/
     storage/             SQLite schemas and focused storage helpers
       outbound-attachments.ts  Telegram upload metadata and draft links
     tools/               guarded email, attachment, and memory tools
+    model-text.ts        removes provider tool-call markup before Telegram output
   channels/telegram/     adapter, commands, cards, state, and webhooks
   email/                 bounded MIME normalization and attachment handling
     attachments.ts       attachment normalization and R2 key helpers
+    outbound.ts          native Email Service message construction and threading
   index.ts               Hono HTTP and Cloudflare Email entry points
 fixtures/sample-email.eml safe local inbound-mail fixture with attachment
 tests/                    regression coverage for reliability and storage

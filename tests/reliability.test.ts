@@ -21,6 +21,7 @@ import {
   isConversationResetRequest,
   isExplicitDirectSendRequest,
 } from "../src/agent/intent.ts";
+import { cleanModelText } from "../src/agent/model-text.ts";
 import { enforceResponsePostconditions } from "../src/agent/postconditions.ts";
 import { learnProfileFromTrustedTelegramMessage } from "../src/agent/profile.ts";
 import { inboxPeriodRange } from "../src/agent/time.ts";
@@ -418,5 +419,27 @@ test("postconditions block false check, draft, and send claims", () => {
       sentMessageId: null,
     }).text,
     SEND_CAPABILITY_PATTERN
+  );
+});
+
+test("confirmation-like follow-ups with new content are not send confirmations", () => {
+  assert.equal(
+    isExplicitSendConfirmation(
+      "yes do that but the body should be here is my resume"
+    ),
+    false
+  );
+});
+
+test("raw provider tool markup never reaches Telegram text", () => {
+  assert.equal(
+    cleanModelText(
+      '<|tool_calls_section_begin|><|tool_call_begin|>functions.composeEmail<|tool_call_argument_begin|>{"to":"friend@example.net"}<|tool_call_end|><|tool_calls_section_end|>'
+    ),
+    ""
+  );
+  assert.equal(
+    cleanModelText("I prepared it. <|tool_calls_section_begin|>ignored"),
+    "I prepared it."
   );
 });

@@ -1,5 +1,6 @@
 import { isStepCount, type ModelMessage, ToolLoopAgent } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
+import { isExplicitSendConfirmation } from "@/agent/confirmation";
 import {
   buildRuntimeInstructions,
   deterministicCapabilityResponse,
@@ -11,6 +12,7 @@ import {
   hasUsableDirectSendContent,
   isExplicitDirectSendRequest,
 } from "@/agent/intent";
+import { cleanModelText } from "@/agent/model-text";
 import { enforceResponsePostconditions } from "@/agent/postconditions";
 import { learnProfileFromTrustedTelegramMessage } from "@/agent/profile";
 import { DEFAULT_TIME_ZONE, formatLocalTimestamp } from "@/agent/time";
@@ -357,8 +359,10 @@ export async function runPersonalAgent(
   const forcedTool = forcedToolForIntent(intent) as keyof typeof tools | null;
   const activeTools = (Object.keys(tools) as Array<keyof typeof tools>).filter(
     (toolName) =>
-      isExplicitDirectSendRequest(userMessage) ||
-      !["sendNewEmail", "sendReply", "sendPendingDraft"].includes(toolName)
+      (isExplicitDirectSendRequest(userMessage) ||
+        !["sendNewEmail", "sendReply"].includes(toolName)) &&
+      (toolName !== "sendPendingDraft" ||
+        Boolean(input.pendingDraft && isExplicitSendConfirmation(userMessage)))
   );
   const workersai = createWorkersAI({
     binding: env.AI,
@@ -436,7 +440,8 @@ export async function runPersonalAgent(
     }
   }
   let text =
-    result.text.trim() || "I finished, but I don’t have a useful response.";
+    cleanModelText(result.text) ||
+    "I finished, but I don’t have a useful response.";
   if (sent) {
     text = "Sent — that email is on its way.";
   } else if (toolContext.result.deliveryOutcomeUnknown) {
